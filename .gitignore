@@ -1,6 +1,11 @@
 # cache and other artifacts produced by Lean's Lake build tool
 .lake/
 
+# tree-sitter parser (generated locally)
+config.json
+parser/tree-sitter-bc/*.so
+parser/tree-sitter-bc/*.wasm
+
 # unpacked GNU bc reference source (consulted locally, not committed)
 bc-1.07.1/
 

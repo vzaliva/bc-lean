@@ -1,6 +1,25 @@
-.PHONY: all lean-build lean-build-file run lean-clean clean cache cache-refresh distclean
+.PHONY: all lean-build lean-build-file run lean-clean clean cache cache-refresh distclean parser parser-test parser-all config.json parser-clean
 
 all: lean-build
+
+# --- tree-sitter bc parser (standalone; no Lean dependency) ---
+
+config.json:
+	rm -f config.json
+	@printf '%s\n' '{' \
+	  '  "parser-directories": [ "./parser" ]' \
+	  '}' > config.json
+
+parser: config.json
+	$(MAKE) -C parser
+
+parser-test: parser
+	./scripts/parse_all_tests.sh
+
+parser-all: parser parser-test
+
+parser-clean:
+	$(MAKE) -C parser clean
 
 # Download precompiled Lean caches for mathlib/upstreams (idempotent).
 # Uses a sentinel file to avoid re-downloading if the cache already exists.

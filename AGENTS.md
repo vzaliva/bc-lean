@@ -14,6 +14,8 @@ This is a Lean 4 project. The semantics are modelled as an **executable
 interpreter** — there is no type checker, since bc is an untyped
 arbitrary-precision calculator language.
 
+- **Parser** (`parser/`) — tree-sitter grammar for `.b`/`.bc` files (standalone;
+  see README *Parser (tree-sitter)* section)
 - **Core implementation** (`Bc/`) — operational semantics for bc programs
 - **Interpreter entry point** (`Main.lean`) — CLI that runs a `.bc` file
 - **Reference source** (`bc-1.07.1/`) — the unpacked GNU bc 1.07.1 source, kept
@@ -42,6 +44,11 @@ arbitrary-precision calculator language.
 ## Build Commands
 
 ```bash
+# tree-sitter bc parser (no Lean dependency)
+make parser                            # Build tree-sitter grammar
+make parser-test                       # Parse all tests/**/*.b and tests/**/*.bc
+make parser-all                        # Build + parse regression
+
 # Build everything (Lean libraries and the interpreter)
 make                                   # == make lean-build
 make lean-build                        # Build Lean libraries and executables
@@ -63,6 +70,12 @@ make distclean                         # Also remove .lake and lake-manifest.jso
 ```
 
 ## Architecture
+
+### `parser/` — tree-sitter grammar
+
+Standalone bc parser for `.b` and `.bc` files. Grammar source:
+`parser/tree-sitter-bc/grammar.js`. Regression inputs under `tests/`. See README
+*Parser (tree-sitter)*.
 
 ### `Bc/` — Core Implementation
 

@@ -17,6 +17,43 @@ programs.
 The reference implementation (`bc-1.07.1/`) is unpacked locally for consultation
 but is not part of this repository.
 
+## Parser (tree-sitter)
+
+A standalone tree-sitter grammar for GNU bc 1.07.1 surface syntax lives under
+`parser/`. It does not require Lean or Lake — only the [tree-sitter
+CLI](https://tree-sitter.github.io/tree-sitter/cli) (**0.25.x** recommended).
+
+### Build and test
+
+```bash
+make parser          # generate + build grammar; writes config.json
+make parser-test     # parse all tests/**/*.b and tests/**/*.bc
+make parser-all      # both of the above
+```
+
+Manual checks:
+
+```bash
+tree-sitter parse examples/hello.bc --config-path config.json --stat
+tree-sitter parse tests/Test/array.b --config-path config.json
+```
+
+Generated artifacts are committed under `parser/tree-sitter-bc/src/` (`grammar.json`,
+`parser.c`, `node-types.json`). After editing `grammar.js`, run `make parser` and
+review the diff in `src/grammar.json` if needed.
+
+### Test corpus
+
+Reference programs copied from GNU bc 1.07.1 are under `tests/` — see
+[tests/README.md](tests/README.md).
+
+### Grammar reference
+
+When parsing behaviour is unclear, consult the local reference tree (not
+committed): `bc-1.07.1/bc/bc.y`, `bc-1.07.1/bc/scan.l`, and
+`bc-1.07.1/doc/bc.texi`. The system `/usr/bin/bc` binary can confirm that a
+snippet is accepted as valid bc input (`bc -l file.b` for libmath-heavy tests).
+
 ## Building
 
 ### Prerequisites
@@ -48,6 +85,8 @@ lake exe bc-lean examples/hello.bc
 
 ## Project Structure
 
+- `parser/`          — tree-sitter grammar (`parser/tree-sitter-bc/`)
+- `tests/`           — bc reference programs for parser regression
 - `Bc/`            — core operational semantics (Lean modules under the `Bc` namespace)
 - `Main.lean`      — interpreter entry point
 - `lakefile.lean`  — Lake build configuration

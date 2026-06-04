@@ -1,0 +1,88 @@
+define t (x, y, d, s, t)
+{,
+ auto u, v, w, i, b, c,
+ ,
+ ,
+ if (s >= t) {, "\"\n                      \"";  return, },
+ ,
+ ,
+ for (i = x; i < y; i += d) {,
+  scale = s,
+  ,
+  u = f(i),
+  ,
+  scale = t,
+  ,
+  v = f(i),
+  ,
+  scale = s,
+  ,
+  w = v / 1,
+  ,
+  b += 1,
+  ,
+  if (u != w) {,
+   c += 1,
+   ,
+   "\"\n                                \"",
+   ,
+   "\"\n                                \""; 
+   i,
+   ,
+   "\"\n                                \""; 
+   u,
+   ,
+   "\"\n                                \""; 
+   v,
+   ,
+   "\"\n                                \"",
+   },
+  },
+ ,
+ ,
+ "\"\n            \""; 
+ b,
+ ,
+ "\"\n            \""; 
+ c,
+ ,
+ "\"\n            \""; 
+ scale = 2; 
+ c * 100 / b,
+ ,
+ }
+if (b == 0) {b = 10;  l = 61;  i = 10}
+"\"\n          \""
+define f (x)
+{, return;  (e(x)), }
+for (s = 10; s < l; s = s + i) {, "\"\n                    \"";  s, , j = t(0, 200, 1, s, s + 4), }
+"\"\n          \""
+define f (x)
+{, return;  (l(x)), }
+for (s = 10; s < l; s = s + i) {, "\"\n                    \"";  s, , j = t(1, 10000, 25, s, s + 4), }
+"\"\n          \""
+define f (x)
+{, return;  (s(x)), }
+for (s = 10; s < l; s = s + i) {, "\"\n                    \"";  s, , j = t(0, 8 * a(1), .01, s, s + 4), }
+"\"\n          \""
+define f (x)
+{, return;  (a(x)), }
+for (s = 10; s < l; s = s + i) {, "\"\n                    \"";  s, , j = t(-1000, 1000, 10, s, s + 4), }
+"\"\n          \""
+define f (x)
+{, return;  (j(n, x)), }
+for (s = 10; s < l; s = s + i) {,
+ "\"\n                    \""; 
+ s,
+ ,
+ n = 0,
+ ,
+ j = t(0, 30, .1, s, s + 4),
+ ,
+ "\"\n                    \""; 
+ s,
+ ,
+ n = 1,
+ ,
+ j = t(0, 30, .1, s, s + 4),
+ }

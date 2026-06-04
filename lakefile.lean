@@ -14,5 +14,9 @@ lean_lib Bc where
   globs := #[.submodules `Bc]
 
 @[default_target]
+lean_exe «bc-parse-test» where
+  root := `Bc.ParseTestMain
+
+@[default_target]
 lean_exe «bc-lean» where
   root := `Main

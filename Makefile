@@ -1,4 +1,4 @@
-.PHONY: all lean-build lean-build-file run lean-clean clean cache cache-refresh distclean parser parser-test parser-all config.json parser-clean
+.PHONY: all lean-build lean-build-file run lean-clean clean cache cache-refresh distclean parser parser-test parser-all config.json parser-clean test ast-test ast-test-update
 
 all: lean-build
 
@@ -17,6 +17,14 @@ parser-test: parser
 	./scripts/parse_all_tests.sh
 
 parser-all: parser parser-test
+
+test: ast-test
+
+ast-test: lean-build parser config.json
+	./scripts/run_ast_tests.sh
+
+ast-test-update: lean-build parser config.json
+	./scripts/update_ast_tests.sh
 
 parser-clean:
 	$(MAKE) -C parser clean

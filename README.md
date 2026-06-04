@@ -76,18 +76,35 @@ make cache-refresh
 ### Run
 
 ```bash
-# Run a bc program
+# Run a bc program (interpreter stub)
 make run BC=examples/hello.bc
 
-# ...or directly via lake
-lake exe bc-lean examples/hello.bc
+# Parse to AST (golden test CLI)
+lake exe bc-parse-test tests/Test/array.b
+
+# AST golden tests (22 corpus + constraint fixtures)
+make test
 ```
+
+## AST parse tests
+
+Lean parses `.b`/`.bc` files via tree-sitter XML (`Bc/Parser.lean`), builds a
+surface AST (`Bc/Syntax.lean`), applies bc.y expression-context checks
+(`Bc/Constraints.lean`), and pretty-prints for regression:
+
+```bash
+make test              # same as make ast-test
+make ast-test-update   # refresh tests/ast-expected/ after intentional AST changes
+```
+
+Expected outputs live under `tests/ast-expected/`; deliberate failures under
+`tests/constraints/`. Tree-sitter-only checks remain `make parser-test`.
 
 ## Project Structure
 
 - `parser/`          — tree-sitter grammar (`parser/tree-sitter-bc/`)
 - `tests/`           — bc reference programs for parser regression
-- `Bc/`            — core operational semantics (Lean modules under the `Bc` namespace)
+- `Bc/`            — surface AST, tree-sitter bridge, constraints (`Bc/` namespace)
 - `Main.lean`      — interpreter entry point
 - `lakefile.lean`  — Lake build configuration
 - `Makefile`       — convenience targets (build, cache, run, clean)

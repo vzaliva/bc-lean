@@ -29,6 +29,19 @@ bc -l tests/Examples/pi.b
 Use plain `bc` when libmath is not required. Parser development only needs syntax
 acceptance (non-zero exit / error message means invalid bc input).
 
+## Lean AST regression
+
+After `make lean-build` and `make parser`:
+
+```bash
+make test                 # 22 corpus files + tests/constraints/ fixtures
+make ast-test-update      # rewrite tests/ast-expected/ from current parser
+```
+
+Golden files mirror paths under `tests/` (e.g. `tests/ast-expected/Test/array.b.output`).
+Constraint fixtures that must fail parsing checks live in `tests/constraints/` with
+matching `.fail` files under `tests/ast-expected/constraints/`.
+
 ## Ground truth for grammar
 
 When parsing behaviour is unclear, consult locally (not committed):

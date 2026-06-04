@@ -165,3 +165,72 @@ parse trees: `a<b<c` yields one flat `relational_expression` with two `rel_op`s;
   warnings (e.g. "comparison in assignment", "return requires parenthesis"),
   which `bc.y` raises as `ct_warn`/`yyerror` actions rather than grammar errors.
 - No golden-output comparison yet (still planned for the evaluator step).
+
+---
+
+## Step 3 — Lean AST, tree-sitter bridge, and golden parse tests
+
+**Date:** 4 June 2026  
+**Agent:** Cursor Agent (Composer)  
+**Duration:** ~30 minutes (AST modules, XML bridge, constraint checks, test harness,
+goldens).
+
+### Request
+
+> Define Lean AST for bc, implement Lean wrapper parsing via tree-sitter, enforce
+> bc.y expression-context constraints deferred in Step 2, golden AST tests
+> (`.output` / `.fail`), `make test`, document as Step 3. Follow poison-lang
+> patterns.
+
+### Pipeline
+
+`tree-sitter parse -x` → vendored `Bc.Xml` → `Bc.Parser` → `Bc.Constraints` →
+`Bc.Pretty` (golden text).
+
+| Module | Role |
+|--------|------|
+| `Bc/Xml/*` | XML parse (from poison-lang / Lean core) |
+| `Bc/Syntax.lean` | Surface AST (`Program`, `Stmt`, `Expr`, …) |
+| `Bc/Meta.lean` | `ExprInfo` flags mirroring `bc.y` bits |
+| `Bc/Parser.lean` | tree-sitter subprocess + XML→AST |
+| `Bc/Constraints.lean` | bc.y context checks (not operational semantics) |
+| `Bc/Pretty.lean` | Stable pretty-printer for goldens |
+| `Bc/ParseTestMain.lean` | `bc-parse-test` CLI |
+
+Prior art: [poison-lang `LeanPoison/Parser.lean`](../poison-lang/LeanPoison/Parser.lean),
+[`scripts/run_tests.sh`](../poison-lang/scripts/run_tests.sh).
+
+### Expression-context constraints enforced
+
+Hard errors in `Bc.Constraints` (via `ExprInfo`):
+
+- Nested assignment RHS (`comparison in assignment`)
+- `comparison in argument` / `comparison in subscript` (including builtins)
+- `Comparison in first/third for expression`
+- `Return outside of a function.`
+
+**Deferred:** return-parenthesis / return-comparison rules when tree-sitter splits
+`return` and `(expr)` into separate statements (grammar limitation); void/break/
+continue placement; extension `ct_warn` noise (`&& operator`, etc.).
+
+### Tests
+
+```bash
+make test              # alias for ast-test
+make ast-test          # 27 cases: 22 corpus + 5 constraint failures
+make ast-test-update   # refresh tests/ast-expected/
+```
+
+Layout:
+
+- `tests/ast-expected/` — mirrors `tests/**` and `tests/constraints/`
+- `tests/constraints/` — hand-written `.fail` fixtures
+- `scripts/run_ast_tests.sh`, `scripts/update_ast_tests.sh`
+
+### Verification
+
+```bash
+make parser-all   # 22/22 tree-sitter (unchanged)
+make test         # 27 passed, 0 failed
+make lean-build   # warning-clean
+```

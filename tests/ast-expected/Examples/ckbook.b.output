@@ -1,0 +1,22 @@
+scale = 2
+print "\"\n              \""
+print "\"\n              \""
+print "\"\n              \""
+print "\"\n              \""; 
+bal = read()
+bal /= 1
+print "\"\n              \""
+while (1) {,
+ "\"\n                    \""; 
+ bal,
+ ,
+ "\"\n                    \""; 
+ trans = read(),
+ ,
+ if (trans == 0) break,
+ ,
+ bal -= trans,
+ ,
+ bal /= 1,
+ }
+quit

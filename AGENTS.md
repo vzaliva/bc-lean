@@ -16,8 +16,9 @@ arbitrary-precision calculator language.
 
 - **Parser** (`parser/`) — tree-sitter grammar for `.b`/`.bc` files (standalone;
   see README *Parser (tree-sitter)* section)
-- **Core implementation** (`Bc/`) — operational semantics for bc programs
-- **Interpreter entry point** (`Main.lean`) — CLI that runs a `.bc` file
+- **Core implementation** (`Bc/`) — surface AST, tree-sitter bridge, constraints
+- **Interpreter entry point** (`Main.lean`) — CLI (`bc-lean`; evaluator WIP)
+- **Parse test CLI** (`Bc/ParseTestMain.lean`) — `bc-parse-test` for AST goldens
 - **Reference source** (`bc-1.07.1/`) — the unpacked GNU bc 1.07.1 source, kept
   locally for consultation. It is **not committed** (see `.gitignore`).
 
@@ -49,6 +50,11 @@ make parser                            # Build tree-sitter grammar
 make parser-test                       # Parse all tests/**/*.b and tests/**/*.bc
 make parser-all                        # Build + parse regression
 
+# Lean AST golden tests
+make test                              # same as ast-test
+make ast-test                          # bc-parse-test vs tests/ast-expected/
+make ast-test-update                   # refresh golden files
+
 # Build everything (Lean libraries and the interpreter)
 make                                   # == make lean-build
 make lean-build                        # Build Lean libraries and executables
@@ -79,10 +85,10 @@ Standalone bc parser for `.b` and `.bc` files. Grammar source:
 
 ### `Bc/` — Core Implementation
 
-The executable interpreter. All modules live under the `Bc` namespace and are
-compiled as a single `lean_lib` (see `lakefile.lean`). This is early-stage: the
-directory currently holds only a placeholder (`Bc/Basic.lean`). As the
-semantics grow, add modules here (for example, lexer, parser, AST, evaluator).
+Surface AST, tree-sitter XML bridge (`Bc/Parser.lean`), bc.y expression-context
+checks (`Bc/Constraints.lean`), and (future) operational semantics under the
+`Bc` namespace (`lakefile.lean` → `lean_lib Bc`). Modules avoid mathlib except
+where the evaluator will need it later.
 
 ### Other Components
 
@@ -102,9 +108,10 @@ modify or commit anything under `bc-1.07.1/`.
 
 ## Testing
 
-A golden-file test harness is not yet set up. When adding tests, prefer
-comparing the interpreter's output on `.bc` programs in `examples/` against the
-behaviour of the reference `bc` binary.
+- **Tree-sitter:** `make parser-test` — syntax acceptance only.
+- **Lean AST:** `make test` — parses each corpus file via `bc-parse-test`, compares
+  to `tests/ast-expected/` (`.output` success, `.fail` for `tests/constraints/`).
+- **Evaluator (planned):** golden output comparison against reference `bc`.
 
 ## Git and GitHub
 

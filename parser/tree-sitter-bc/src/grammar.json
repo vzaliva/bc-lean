@@ -901,46 +901,41 @@
       ]
     },
     "relational_expression": {
-      "type": "CHOICE",
-      "members": [
-        {
-          "type": "PREC_LEFT",
-          "value": 5,
-          "content": {
-            "type": "SEQ",
-            "members": [
-              {
-                "type": "FIELD",
-                "name": "left",
-                "content": {
-                  "type": "SYMBOL",
-                  "name": "additive_expression"
+      "type": "PREC_LEFT",
+      "value": 5,
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "SYMBOL",
+            "name": "additive_expression"
+          },
+          {
+            "type": "REPEAT",
+            "content": {
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "FIELD",
+                  "name": "operator",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "rel_op"
+                  }
+                },
+                {
+                  "type": "FIELD",
+                  "name": "right",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "additive_expression"
+                  }
                 }
-              },
-              {
-                "type": "FIELD",
-                "name": "operator",
-                "content": {
-                  "type": "SYMBOL",
-                  "name": "rel_op"
-                }
-              },
-              {
-                "type": "FIELD",
-                "name": "right",
-                "content": {
-                  "type": "SYMBOL",
-                  "name": "additive_expression"
-                }
-              }
-            ]
+              ]
+            }
           }
-        },
-        {
-          "type": "SYMBOL",
-          "name": "additive_expression"
-        }
-      ]
+        ]
+      }
     },
     "rel_op": {
       "type": "CHOICE",
@@ -1113,17 +1108,8 @@
                 "type": "FIELD",
                 "name": "operator",
                 "content": {
-                  "type": "CHOICE",
-                  "members": [
-                    {
-                      "type": "STRING",
-                      "value": "+"
-                    },
-                    {
-                      "type": "STRING",
-                      "value": "-"
-                    }
-                  ]
+                  "type": "STRING",
+                  "value": "-"
                 }
               },
               {
@@ -1165,7 +1151,7 @@
                 "name": "operand",
                 "content": {
                   "type": "SYMBOL",
-                  "name": "postfix_expression"
+                  "name": "named_expression"
                 }
               }
             ]
@@ -1191,7 +1177,7 @@
                 "name": "operand",
                 "content": {
                   "type": "SYMBOL",
-                  "name": "primary_expression"
+                  "name": "named_expression"
                 }
               },
               {
@@ -1764,11 +1750,11 @@
   ],
   "conflicts": [
     [
-      "special_variable",
-      "builtin_call"
+      "_body_item"
     ],
     [
-      "_body_item"
+      "primary_expression",
+      "named_expression"
     ]
   ],
   "precedences": [],

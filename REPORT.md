@@ -82,3 +82,86 @@ semicolon-separated statements inside function bodies.
 
 Wire the grammar into Lean: `tree-sitter parse -x` → AST in `Bc/`, then an
 executable semantics/evaluator with golden tests against `/usr/bin/bc`.
+
+---
+
+## Step 2 — Parser code review (correctness & accuracy)
+
+**Date:** 4 June 2026  
+**Agent:** Cursor Agent (Claude Opus 4.8)  
+**Duration:** ~30 minutes (review, differential testing against `/usr/bin/bc`,
+grammar fixes, re-verification).
+
+### Request
+
+> We have implemented a tree-sitter parser (Step 1). Examine the current
+> implementation, run the tests, make sure it is correct and accurate, and
+> document the work in `REPORT.md` as Step 2.
+
+### Method
+
+1. **Re-ran the regression** (`make parser-all`): 22/22 green, but it only greps
+   `tree-sitter parse --stat` output for `error`.
+2. **Hardened the pass criterion**: parsed every corpus file with the full tree
+   printer and confirmed **no `ERROR`, `MISSING`, or `UNEXPECTED` nodes** — the
+   22 files parse cleanly, not merely via error recovery. Also verified the
+   regression harness *does* flag failures (deliberately malformed input → exit
+   1 with an `ERROR` node).
+3. **Differential testing against the reference `bc` 1.07.1** (`/usr/bin/bc`):
+   wrote a harness that classifies each snippet as accept/reject in both the
+   real `bc` and the tree-sitter grammar, then compared. Ground truth for the
+   grammar rules: `bc-1.07.1/bc/bc.y` (precedence table at `bc.y:110–119` and
+   the `expression`/`named_expression` rules).
+
+### Findings (3 accuracy defects + 1 warning)
+
+| # | Issue | Real `bc` | Old grammar |
+|---|-------|-----------|-------------|
+| 1 | Chained relational `a<b<c`, `1<2==3` (`REL_OP` is `%left` in `bc.y`) | accept | **reject** |
+| 2 | Unary plus `+5` (only unary `-` exists in `bc.y:626`) | reject | **accept** |
+| 3 | `++`/`--` on non-lvalues (`5++`, `++5`, `f(x)++`; `bc.y` requires `named_expression`) | reject | **accept** |
+| 4 | `tree-sitter generate` emitted `unnecessary conflicts: special_variable, builtin_call` | — | warning |
+
+Defect #1 is the most serious: the parser **rejected valid `bc` programs**.
+#2/#3 were over-permissiveness (accepting invalid input). #4 violates the
+project's "no warnings" standard.
+
+### Fixes (`parser/tree-sitter-bc/grammar.js`)
+
+- **Chained relational**: `relational_expression` now uses
+  `prec.left(5, seq(additive, repeat(seq(rel_op, additive))))` — the same
+  left-chaining pattern as the additive/multiplicative levels — instead of a
+  single `additive rel_op additive`.
+- **Unary plus removed**: the sign operator is now `"-"` only (was
+  `choice("+","-")`).
+- **Incr/decr lvalue restriction**: prefix and postfix `++`/`--` operands
+  changed from `postfix_expression`/`primary_expression` to `named_expression`,
+  matching `bc.y`. This needed a new GLR conflict
+  `[$.primary_expression, $.named_expression]` (an `identifier` followed by
+  `++` can reduce either way; tree-sitter resolves it dynamically).
+- **Unnecessary conflict removed**: dropped the stale
+  `[$.special_variable, $.builtin_call]` entry. `scale(…)` still parses as
+  `builtin_call` and bare `scale` as `special_variable`.
+
+`tree-sitter generate` is now **warning-free**.
+
+### Verification
+
+```bash
+make parser-all
+# parse_all_tests: 22 passed, 0 failed (22 total)   (no generate warnings)
+```
+
+Differential check vs `/usr/bin/bc` over ~30 snippets (precedence, associativity,
+assignment chains, incr/decr placement, builtins, `read()`, arrays) — **all
+accept/reject verdicts now MATCH**, including the four cases above. Spot-checked
+parse trees: `a<b<c` yields one flat `relational_expression` with two `rel_op`s;
+`scale(5)` → `builtin_call`; `scale=3` → assignment with `special_variable` lhs.
+
+### Known remaining gaps (deferred, not defects in scope)
+
+- The parser is a recogniser only: the layered precedence grammar resolves
+  associativity but the project does not yet validate `bc`'s *semantic*
+  warnings (e.g. "comparison in assignment", "return requires parenthesis"),
+  which `bc.y` raises as `ct_warn`/`yyerror` actions rather than grammar errors.
+- No golden-output comparison yet (still planned for the evaluator step).

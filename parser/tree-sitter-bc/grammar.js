@@ -19,8 +19,8 @@ module.exports = grammar({
   ],
 
   conflicts: $ => [
-    [$.special_variable, $.builtin_call],
     [$._body_item],
+    [$.primary_expression, $.named_expression],
   ],
 
   rules: {
@@ -200,14 +200,13 @@ module.exports = grammar({
       $.relational_expression,
     ),
 
-    relational_expression: $ => choice(
-      prec.left(5, seq(
-        field("left", $.additive_expression),
+    relational_expression: $ => prec.left(5, seq(
+      $.additive_expression,
+      repeat(seq(
         field("operator", $.rel_op),
         field("right", $.additive_expression),
       )),
-      $.additive_expression,
-    ),
+    )),
 
     rel_op: $ => choice("==", "!=", "<=", ">=", "<", ">"),
 
@@ -237,19 +236,19 @@ module.exports = grammar({
 
     unary_expression: $ => choice(
       prec(9, seq(
-        field("operator", choice("+", "-")),
+        field("operator", "-"),
         field("operand", $.unary_expression),
       )),
       prec(9, seq(
         field("operator", choice("++", "--")),
-        field("operand", $.postfix_expression),
+        field("operand", $.named_expression),
       )),
       $.postfix_expression,
     ),
 
     postfix_expression: $ => choice(
       prec(10, seq(
-        field("operand", $.primary_expression),
+        field("operand", $.named_expression),
         field("operator", choice("++", "--")),
       )),
       $.primary_expression,

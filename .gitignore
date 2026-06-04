@@ -1,2 +1,11 @@
 # cache and other artifacts produced by Lean's Lake build tool
 .lake/
+
+# unpacked GNU bc reference source (consulted locally, not committed)
+bc-1.07.1/
+
+# editor and AI-agent tooling directories
+.vscode/
+.cursor/
+.claude/
+.agents/

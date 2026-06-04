@@ -1,0 +1,2 @@
+/* A minimal bc program: arithmetic and a print. */
+2 + 2

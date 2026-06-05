@@ -35,7 +35,7 @@ private def preloadMathlib (fuel : Nat) (st : RuntimeState) : IO RunResult := do
   let lib := "bc-1.07.1/bc/libmath.b"
   if ← System.FilePath.pathExists lib then
     let prog ← loadProgram lib
-    runProgramWithState fuel st prog
+    return runProgramWithState fuel st prog
   else
     throw <| IO.userError s!"math library source not found: {lib}"
 
@@ -57,7 +57,7 @@ private def runFiles (opts : CliOptions) : IO UInt32 := do
         return 6
   for file in opts.files do
     let prog ← loadProgram file
-    match ← runProgramWithState opts.fuel st prog with
+    match runProgramWithState opts.fuel st prog with
     | .success st' => st := st'
     | .outOfFuel st' =>
         IO.print st'.output

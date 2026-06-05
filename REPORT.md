@@ -391,10 +391,10 @@ poison-lang comparison, implementation, and regression testing.
 
 Implement the next project step: a big-step operational semantics for POSIX bc
 that can also run as the definitional interpreter. Use poison-lang as
-inspiration for an executable, `IO`-based evaluator. Do not use `partial`
-functions in the semantics. Faithfully implement bc semantics for the POSIX
-syntax and add tests that run fixtures through the interpreter and compare
-outputs against the GNU `bc` command.
+inspiration for an executable evaluator. Do not use `partial` functions in the
+semantics. Faithfully implement bc semantics for the POSIX syntax and add tests
+that run fixtures through the interpreter and compare outputs against the GNU
+`bc` command.
 
 ### Reference material
 
@@ -402,7 +402,7 @@ outputs against the GNU `bc` command.
   `bc/storage.c`, `lib/number.c`, `bc/bc.y`, and `bc/libmath.b`.
 - Current poison-lang checkout at commit
   `f052d113586f742417c89438a346626720ce66c2`; `LeanPoison/BigStep.lean`
-  was used as an `IO`-based big-step evaluator reference.
+  was used as a big-step evaluator reference.
 - Live `bc --version`: GNU bc 1.07.1.
 
 ### Deliverables
@@ -477,3 +477,55 @@ attempt to reproduce every `bc -s` / `bc -w` compile-time warning. The decimal
 number implementation was validated against the checked-in reference corpus,
 including heavy arithmetic and libmath tests, but it remains a Lean model rather
 than a direct binding to GNU bc's `lib/number.c`.
+
+---
+
+## Step 7 — Human-guided POSIX consolidation and evaluator cleanup
+
+**Agent:** Codex (GPT-5.5 xhigh)  
+**Duration:** ~1.5 hours.
+
+This step records the human-guided follow-up after the initial evaluator landed.
+The work tightened the project boundary and improved confidence in the
+definitional interpreter.
+
+### Changes
+
+1. **Added more evaluator tests.** Imported a curated BSD-licensed subset of
+   Gavin Howard's bc tests under `tests/external/gavin-bc/posix/`, added license
+   and provenance notes, and wired those fixtures into the evaluator comparison
+   harness and AST golden coverage.
+2. **Restricted the project to POSIX bc.** Pruned the AST, tree-sitter grammar,
+   XML bridge, pretty-printer, evaluator, docs, and fixtures so the checked-in
+   project models only the POSIX subset. Removed stale test files and generated
+   goldens for syntax and behavior outside that scope, regenerated parser
+   artifacts, and refreshed AST expected output.
+3. **Removed `IO` from the semantics.** After POSIX pruning removed input and
+   nondeterministic effects from the language model, `Bc.Eval` was refactored so
+   semantic functions return `Result` / `RunResult` directly. `IO` remains only
+   in the CLI/parser layer for file access and output.
+
+### Verification
+
+```bash
+lake build
+# Build completed successfully (22 jobs).
+
+shellcheck scripts/run_eval_tests.sh scripts/run_ast_tests.sh \
+  scripts/update_ast_tests.sh scripts/parse_all_tests.sh
+# no findings
+
+make parser-all
+# parse_all_tests: 37 passed, 0 failed (37 total)
+
+make test
+# AST Test Summary:
+# Passed: 38
+# Failed: 0
+# Skipped: 0
+#
+# Eval Test Summary:
+# Passed: 37
+# Failed: 0
+# Skipped: 0
+```

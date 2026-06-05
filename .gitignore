@@ -14,3 +14,7 @@ bc-1.07.1/
 .cursor/
 .claude/
 .agents/
+
+# Temporary template
+poison-lang/
+

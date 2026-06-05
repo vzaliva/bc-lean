@@ -55,10 +55,13 @@ make parser                            # Build tree-sitter grammar
 make parser-test                       # Parse the upstream valid corpus
 make parser-all                        # Build + parse regression
 
-# Lean AST golden tests
-make test                              # same as ast-test
+# Lean AST and evaluator tests
+make test                              # AST + eval tests for both semantics
 make ast-test                          # bc-parse-test vs tests/ast-expected/
 make ast-test-update                   # refresh golden files
+make eval-test                         # evaluator tests for big-step and small-step
+make eval-test-big                     # evaluator tests for big-step only
+make eval-test-small                   # evaluator tests for small-step only
 
 # Build everything (Lean libraries and the interpreter)
 make                                   # == make lean-build
@@ -68,6 +71,7 @@ make lean-build-file FILE=Bc/BigStep.lean # Build one module (path or dotted nam
 # Running the interpreter
 make run BC=examples/hello.bc          # Run a .bc file
 lake exe bc-lean examples/hello.bc     # ...or directly via lake
+lake exe bc-lean --semantics small examples/hello.bc
 
 # Lean cache (mathlib); `lean-build` already depends on `cache`
 make cache                             # Download precompiled caches if needed
@@ -90,11 +94,11 @@ Standalone bc parser for `.b` and `.bc` files. Grammar source:
 
 ### `Bc/` — Core Implementation
 
-Surface AST, tree-sitter XML bridge (`Bc/Parser.lean`), and (future)
-operational semantics under the `Bc` namespace (`lakefile.lean` → `lean_lib Bc`).
-The parser is syntax-only; do not add context checks, diagnostics, or semantic
-checks to it. Modules avoid mathlib except where the evaluator will need it
-later.
+Surface AST, tree-sitter XML bridge (`Bc/Parser.lean`), shared runtime helpers
+(`Bc/Runtime.lean`), and operational semantics under the `Bc` namespace
+(`lakefile.lean` → `lean_lib Bc`). The parser is syntax-only; do not add context
+checks, diagnostics, or semantic checks to it. Modules avoid mathlib except
+where the evaluator will need it later.
 
 ### Other Components
 
@@ -119,11 +123,12 @@ as outside the currently supported POSIX/standard syntax subset.
 ## Testing
 
 - **Tree-sitter:** `make parser-test` — valid-corpus syntax acceptance only.
-- **Lean AST:** `make test` — parses each corpus file via `bc-parse-test`, compares
+- **Lean AST:** `make ast-test` — parses each corpus file via `bc-parse-test`, compares
   to `tests/ast-expected/` (`.output` success, `.fail` for `tests/parse-invalid/`).
+- **Evaluator:** `make eval-test` — compares both big-step and small-step
+  interpreter output against GNU `bc`.
 - **Context/semantic fixtures:** `tests/semantics/` is reserved for later work and
   is not exercised by parser or AST tests.
-- **Evaluator (planned):** golden output comparison against reference `bc`.
 
 ## Git and GitHub
 

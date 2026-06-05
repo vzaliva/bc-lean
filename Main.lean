@@ -1,15 +1,27 @@
 import Bc.BigStep
 import Bc.Parser
+import Bc.SmallStep
 
 open Bc
+
+inductive Semantics where
+  | big
+  | small
+  deriving Repr, BEq
 
 structure CliOptions where
   fuel : Nat := 200000
   mathlib : Bool := false
+  semantics : Semantics := .big
   files : List String := []
 
 private def usage : String :=
-  "Usage: bc-lean [--fuel N] [-l|--mathlib] file..."
+  "Usage: bc-lean [--fuel N] [--semantics big|small] [-l|--mathlib] file..."
+
+private def parseSemantics : String → Except String Semantics
+  | "big" | "big-step" => .ok .big
+  | "small" | "small-step" => .ok .small
+  | value => .error s!"invalid --semantics value: {value}"
 
 private def parseArgs : List String → CliOptions → Except String CliOptions
   | [], opts => .ok opts
@@ -18,6 +30,15 @@ private def parseArgs : List String → CliOptions → Except String CliOptions
       | some fuel => parseArgs rest { opts with fuel := fuel }
       | none => .error s!"invalid --fuel value: {n}"
   | "--fuel" :: [], _ => .error "missing value for --fuel"
+  | "--semantics" :: value :: rest, opts =>
+      match parseSemantics value with
+      | .ok semantics => parseArgs rest { opts with semantics := semantics }
+      | .error msg => .error msg
+  | "--semantics" :: [], _ => .error "missing value for --semantics"
+  | "--big-step" :: rest, opts =>
+      parseArgs rest { opts with semantics := .big }
+  | "--small-step" :: rest, opts =>
+      parseArgs rest { opts with semantics := .small }
   | "-l" :: rest, opts | "--mathlib" :: rest, opts =>
       parseArgs rest { opts with mathlib := true }
   | "-h" :: _, _ | "--help" :: _, _ => .error usage
@@ -30,11 +51,18 @@ private def parseArgs : List String → CliOptions → Except String CliOptions
 private def loadProgram (path : String) : IO Program :=
   parseBcFile path
 
-private def preloadMathlib (fuel : Nat) (st : RuntimeState) : IO RunResult := do
+private def runWithSemantics (semantics : Semantics) (fuel : Nat) (st : RuntimeState)
+    (program : Program) : RunResult :=
+  match semantics with
+  | .big => Bc.runProgramWithState fuel st program
+  | .small => Bc.SmallStep.runProgramWithState fuel st program
+
+private def preloadMathlib (semantics : Semantics) (fuel : Nat) (st : RuntimeState) :
+    IO RunResult := do
   let lib := "bc-1.07.1/bc/libmath.b"
   if ← System.FilePath.pathExists lib then
     let prog ← loadProgram lib
-    return runProgramWithState fuel st prog
+    return runWithSemantics semantics fuel st prog
   else
     throw <| IO.userError s!"math library source not found: {lib}"
 
@@ -44,7 +72,7 @@ private def runFiles (opts : CliOptions) : IO UInt32 := do
     return 1
   let mut st := initialState
   if opts.mathlib then
-    match ← preloadMathlib opts.fuel st with
+    match ← preloadMathlib opts.semantics opts.fuel st with
     | .success st' => st := st'
     | .outOfFuel st' =>
         IO.print st'.output
@@ -56,7 +84,7 @@ private def runFiles (opts : CliOptions) : IO UInt32 := do
         return 6
   for file in opts.files do
     let prog ← loadProgram file
-    match runProgramWithState opts.fuel st prog with
+    match runWithSemantics opts.semantics opts.fuel st prog with
     | .success st' => st := st'
     | .outOfFuel st' =>
         IO.print st'.output

@@ -1,6 +1,9 @@
-.PHONY: all lean-build lean-build-file run lean-clean clean cache cache-refresh distclean parser parser-test parser-all config.json parser-clean test ast-test ast-test-update eval-test
+.PHONY: all lean-build lean-build-file run lean-clean clean cache cache-refresh distclean parser parser-test parser-all config.json parser-clean test ast-test ast-test-update eval-test eval-test-big eval-test-small
 
 all: lean-build
+
+BIG_STEP_FUEL ?= 200000
+SMALL_STEP_FUEL ?= 10000000
 
 # --- tree-sitter bc parser (standalone; no Lean dependency) ---
 
@@ -18,8 +21,7 @@ parser-test: parser
 
 parser-all: parser parser-test
 
-test: ast-test
-	BC_LEAN_ASSUME_BUILT=1 ./scripts/run_eval_tests.sh
+test: ast-test eval-test
 
 ast-test: lean-build parser config.json
 	./scripts/run_ast_tests.sh
@@ -27,8 +29,13 @@ ast-test: lean-build parser config.json
 ast-test-update: lean-build parser config.json
 	./scripts/update_ast_tests.sh
 
-eval-test: lean-build parser config.json
-	BC_LEAN_ASSUME_BUILT=1 ./scripts/run_eval_tests.sh
+eval-test: eval-test-big eval-test-small
+
+eval-test-big: lean-build parser config.json
+	BC_LEAN_ASSUME_BUILT=1 BC_LEAN_FUEL=$(BIG_STEP_FUEL) ./scripts/run_eval_tests.sh --semantics big
+
+eval-test-small: lean-build parser config.json
+	BC_LEAN_ASSUME_BUILT=1 BC_LEAN_FUEL=$(SMALL_STEP_FUEL) ./scripts/run_eval_tests.sh --semantics small
 
 parser-clean:
 	$(MAKE) -C parser clean

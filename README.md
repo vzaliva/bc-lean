@@ -82,11 +82,12 @@ make cache-refresh
 ```bash
 # Run a bc program
 make run BC=examples/hello.bc
+lake exe bc-lean --semantics small examples/hello.bc
 
 # Parse to AST (golden test CLI)
 lake exe bc-parse-test tests/Test/array.b
 
-# AST golden tests (valid corpus + parser-invalid fixtures)
+# AST golden tests plus big-step and small-step evaluator comparisons
 make test
 ```
 
@@ -97,7 +98,11 @@ surface AST (`Bc/Syntax.lean`), and pretty-prints it for regression. The parser
 is intentionally syntax-only; context and semantic checks are postponed.
 
 ```bash
-make test              # same as make ast-test
+make test              # AST tests + big-step and small-step eval tests
+make ast-test          # AST tests only
+make eval-test         # eval tests with both semantics
+make eval-test-big     # eval tests with big-step semantics
+make eval-test-small   # eval tests with small-step semantics
 make ast-test-update   # refresh tests/ast-expected/ after intentional AST changes
 ```
 
@@ -109,7 +114,7 @@ under `tests/semantics/` and are not exercised by parser or AST tests.
 
 - `parser/`          — tree-sitter grammar (`parser/tree-sitter-bc/`)
 - `tests/`           — POSIX bc reference programs and parser/semantic fixtures
-- `Bc/`            — surface AST and tree-sitter bridge (`Bc` namespace)
+- `Bc/`            — surface AST, parser bridge, runtime helpers, and semantics
 - `Main.lean`      — interpreter entry point
 - `lakefile.lean`  — Lake build configuration
 - `Makefile`       — convenience targets (build, cache, run, clean)

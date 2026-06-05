@@ -15,6 +15,7 @@ TEMP_DIR="testResults-eval"
 LOCK_DIR="$TEMP_DIR/.print_lock"
 PROGRESS_FILE="$TEMP_DIR/.progress"
 FUEL="${BC_LEAN_FUEL:-200000}"
+SEMANTICS="${BC_LEAN_SEMANTICS:-big}"
 BC_LEAN_EXE="${BC_LEAN_EXE:-.lake/build/bin/bc-lean}"
 BC_LEAN_ASSUME_BUILT="${BC_LEAN_ASSUME_BUILT:-0}"
 
@@ -27,8 +28,9 @@ else
 fi
 
 print_usage() {
-  echo "Usage: $0 [-j|--jobs N] [test ...]"
+  echo "Usage: $0 [-j|--jobs N] [--semantics big|small] [test ...]"
   echo "  -j, --jobs N   Number of parallel executions (default: CPU count)"
+  echo "  --semantics S  Semantics to test: big or small (default: $SEMANTICS)"
   echo "  test ...       Optional test paths; defaults to checked-in eval corpora"
 }
 
@@ -36,6 +38,10 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     -j|--jobs)
       JOBS="${2:-}"
+      shift 2
+      ;;
+    --semantics)
+      SEMANTICS="${2:-}"
       shift 2
       ;;
     -h|--help)
@@ -61,6 +67,19 @@ if ! [[ "$JOBS" =~ ^[0-9]+$ ]] || [[ "$JOBS" -lt 1 ]]; then
   echo "Error: --jobs must be a positive integer" >&2
   exit 1
 fi
+
+case "$SEMANTICS" in
+  big|big-step)
+    SEMANTICS="big"
+    ;;
+  small|small-step)
+    SEMANTICS="small"
+    ;;
+  *)
+    echo "Error: --semantics must be 'big' or 'small'" >&2
+    exit 1
+    ;;
+esac
 
 cleanup() {
   local pids=()
@@ -136,7 +155,7 @@ run_single_test() {
     math_args=(-l)
   fi
 
-  "$BC_LEAN_EXE" --fuel "$FUEL" "${math_args[@]}" "$src" \
+  "$BC_LEAN_EXE" --fuel "$FUEL" --semantics "$SEMANTICS" "${math_args[@]}" "$src" \
     </dev/null >"$lean_out" 2>"$lean_err"
   lean_code=$?
 
@@ -221,7 +240,7 @@ mkdir -p "$TEMP_DIR"
 echo 0 >"$PROGRESS_FILE"
 TOTAL_TESTS=${#test_files[@]}
 
-echo "Running $TOTAL_TESTS eval tests with $JOBS job(s), fuel=$FUEL"
+echo "Running $TOTAL_TESTS eval tests with $JOBS job(s), fuel=$FUEL, semantics=$SEMANTICS"
 
 active_jobs=0
 for src in "${test_files[@]}"; do
@@ -253,7 +272,7 @@ for status_file in "$TEMP_DIR"/*.status; do
 done
 
 echo ""
-echo "==== Eval Test Summary ===="
+echo "==== Eval Test Summary ($SEMANTICS) ===="
 echo "Passed: $PASS_COUNT"
 echo "Failed: $FAIL_COUNT"
 echo "Skipped: $SKIP_COUNT"

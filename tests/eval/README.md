@@ -6,3 +6,6 @@ Lean AST golden tests.
 - `gnu/` contains GNU bc 1.07.1 reference fixtures that are useful for evaluator
   coverage but are not picked up by the AST test layout.
 - `local/` contains small focused POSIX bc programs written for this project.
+
+The harness accepts `--semantics big` or `--semantics small`. `make eval-test`
+runs both; `make eval-test-big` and `make eval-test-small` run one semantics.

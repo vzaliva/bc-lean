@@ -1,15 +1,87 @@
 /-
-  Fuel-bounded big-step operational semantics for the POSIX bc subset.
+  Fuel-bounded small-step operational semantics for the POSIX bc subset.
 
-  The evaluator is executable and models program output in RuntimeState.
-  Recursive semantic functions are fuel-bounded and total; parser/pretty-printer
-  infrastructure may remain partial, but this module does not use partial
-  definitions.
+  This module defines a pure control-machine stepper. It shares the runtime data
+  model and runtime helpers from `Bc.Runtime`; statements,
+  function bodies, loops, and top-level items are stepped by local small-step
+  transition rules.
 -/
 
 import Bc.Runtime
 
 namespace Bc
+
+namespace SmallStep
+
+inductive Task where
+  | topItems (items : Program)
+  | topItem (item : TopItem)
+  | stmts (stmts : List Stmt)
+  | body (body : List BodyItem)
+  | stmt (stmt : Stmt)
+  | whileLoop (cond : Expr) (body : Stmt)
+  | forCheck (cond update : Expr) (body : Stmt)
+  | forAfterBody (cond update : Expr) (body : Stmt)
+  deriving Repr
+
+structure Config where
+  state : RuntimeState
+  tasks : List Task
+  deriving Repr
+
+inductive StepResult where
+  | next (config : Config)
+  | done (state : RuntimeState)
+  | control (state : RuntimeState) (control : Control)
+  | outOfFuel (state : RuntimeState)
+  | runtimeError (state : RuntimeState) (message : String)
+  deriving Repr
+
+mutual
+
+private def stmtContainsQuit : Stmt → Bool
+  | .expr _ => false
+  | .str _ => false
+  | .auto _ => false
+  | .if _ thenBranch => stmtContainsQuit thenBranch
+  | .while _ body => stmtContainsQuit body
+  | .for _ _ _ body => stmtContainsQuit body
+  | .break => false
+  | .return _ => false
+  | .quit => true
+  | .block body => bodyContainsQuit body
+
+private def stmtsContainQuit : List Stmt → Bool
+  | [] => false
+  | stmt :: rest => stmtContainsQuit stmt || stmtsContainQuit rest
+
+private def bodyItemContainsQuit : BodyItem → Bool
+  | .stmts ss => stmtsContainQuit ss
+  | .newline => false
+
+private def bodyContainsQuit (body : List BodyItem) : Bool :=
+  match body with
+  | [] => false
+  | item :: rest => bodyItemContainsQuit item || bodyContainsQuit rest
+
+end
+
+private def topItemContainsQuit : TopItem → Bool
+  | .funDef defn => bodyContainsQuit defn.body
+  | .stmts ss => stmtsContainQuit ss
+
+private def next (st : RuntimeState) (tasks : List Task) : StepResult :=
+  .next { state := st, tasks := tasks }
+
+private def propagateBreak (st : RuntimeState) : List Task → StepResult
+  | [] => .control st .break
+  | .whileLoop _ _ :: rest => next st rest
+  | .forAfterBody _ _ _ :: rest => next st rest
+  | _ :: rest => propagateBreak st rest
+
+private def propagateReturn (st : RuntimeState) (_value : Option Num) : List Task → StepResult
+  | [] => .control st (.return _value)
+  | _ :: rest => propagateReturn st _value rest
 
 mutual
 
@@ -245,176 +317,130 @@ def evalCall (fuel : Nat) (st : RuntimeState) (name : Name) (args : List Arg) :
           | .outOfFuel st => .outOfFuel st
           | .runtimeError st msg => .runtimeError st msg
 
-def evalStmt (fuel : Nat) (st : RuntimeState) (stmt : Stmt) : Result Control :=
-  match fuel with
-  | 0 => .outOfFuel st
-  | fuel' + 1 =>
-      match stmt with
-      | .expr e =>
-          match evalExpr fuel' st e with
-          | .ok st n =>
-              if isTopAssignment e then .ok st .normal
-              else .ok (printNumLine st n) .normal
-          | .outOfFuel st => .outOfFuel st
-          | .runtimeError st msg => .runtimeError st msg
-      | .str s =>
-          .ok (appendOutput st (decodeBcString s)) .normal
-      | .auto _ =>
-          .ok st .normal
-      | .if cond thenBranch =>
-          match evalExpr fuel' st cond with
-          | .ok st n =>
-              if n.isZero then .ok st .normal else evalStmt fuel' st thenBranch
-          | .outOfFuel st => .outOfFuel st
-          | .runtimeError st msg => .runtimeError st msg
-      | .while cond body =>
-          match evalExpr fuel' st cond with
-          | .ok st n =>
-              if n.isZero then
-                .ok st .normal
-              else
-                match evalStmt fuel' st body with
-                | .ok st .normal => evalStmt fuel' st stmt
-                | .ok st .break => .ok st .normal
-                | .ok st c => .ok st c
-                | .outOfFuel st => .outOfFuel st
-                | .runtimeError st msg => .runtimeError st msg
-          | .outOfFuel st => .outOfFuel st
-          | .runtimeError st msg => .runtimeError st msg
-      | .for init cond update body =>
-          match evalExpr fuel' st init with
-          | .ok st _ => evalFor fuel' st cond update body
-          | .outOfFuel st => .outOfFuel st
-          | .runtimeError st msg => .runtimeError st msg
-      | .break => .ok st .break
-      | .return none => .ok st (.return none)
-      | .return (some e) =>
-          match evalExpr fuel' st e with
-          | .ok st n => .ok st (.return (some n))
-          | .outOfFuel st => .outOfFuel st
-          | .runtimeError st msg => .runtimeError st msg
-      | .quit => .ok { st with stopped := true } .stop
-      | .block body =>
-          evalBody fuel' st body
-
-def evalFor (fuel : Nat) (st : RuntimeState) (cond update : Expr) (body : Stmt) :
-    Result Control :=
-  match fuel with
-  | 0 => .outOfFuel st
-  | fuel' + 1 =>
-      match evalExpr fuel' st cond with
-      | .ok st n =>
-          if n.isZero then
-            .ok st .normal
-          else
-            match evalStmt fuel' st body with
-            | .ok st .normal =>
-                match evalExpr fuel' st update with
-                | .ok st _ => evalFor fuel' st cond update body
-                | .outOfFuel st => .outOfFuel st
-                | .runtimeError st msg => .runtimeError st msg
-            | .ok st .break => .ok st .normal
-            | .ok st c => .ok st c
-            | .outOfFuel st => .outOfFuel st
-            | .runtimeError st msg => .runtimeError st msg
-      | .outOfFuel st => .outOfFuel st
-      | .runtimeError st msg => .runtimeError st msg
-
-def evalStmts (fuel : Nat) (st : RuntimeState) (stmts : List Stmt) :
-    Result Control :=
-  match fuel with
-  | 0 => .outOfFuel st
-  | fuel' + 1 =>
-      match stmts with
-      | [] => .ok st .normal
-      | stmt :: rest =>
-          match evalStmt fuel' st stmt with
-          | .ok st .normal => evalStmts fuel' st rest
-          | .ok st c => .ok st c
-          | .outOfFuel st => .outOfFuel st
-          | .runtimeError st msg => .runtimeError st msg
-
-def evalBody (fuel : Nat) (st : RuntimeState) (body : List BodyItem) :
-    Result Control :=
-  match fuel with
-  | 0 => .outOfFuel st
-  | fuel' + 1 =>
-      match body with
-      | [] => .ok st .normal
-      | .newline :: rest => evalBody fuel' st rest
-      | .stmts ss :: rest =>
-          match evalStmts fuel' st ss with
-          | .ok st .normal => evalBody fuel' st rest
-          | .ok st c => .ok st c
-          | .outOfFuel st => .outOfFuel st
-          | .runtimeError st msg => .runtimeError st msg
-
-end
-
-def evalTopItem (fuel : Nat) (st : RuntimeState) : TopItem → Result Control
-  | .funDef defn => .ok (setFunction st defn) .normal
-  | .stmts ss => evalStmts fuel st ss
-
-mutual
-
-private def stmtContainsQuit : Stmt → Bool
-  | .expr _ => false
-  | .str _ => false
-  | .auto _ => false
-  | .if _ thenBranch => stmtContainsQuit thenBranch
-  | .while _ body => stmtContainsQuit body
-  | .for _ _ _ body => stmtContainsQuit body
-  | .break => false
-  | .return _ => false
-  | .quit => true
-  | .block body => bodyContainsQuit body
-
-private def stmtsContainQuit : List Stmt → Bool
-  | [] => false
-  | stmt :: rest => stmtContainsQuit stmt || stmtsContainQuit rest
-
-private def bodyItemContainsQuit : BodyItem → Bool
-  | .stmts ss => stmtsContainQuit ss
-  | .newline => false
-
-private def bodyContainsQuit (body : List BodyItem) : Bool :=
-  match body with
-  | [] => false
-  | item :: rest => bodyItemContainsQuit item || bodyContainsQuit rest
-
-end
-
-private def topItemContainsQuit : TopItem → Bool
-  | .funDef defn => bodyContainsQuit defn.body
-  | .stmts ss => stmtsContainQuit ss
-
-def evalProgramItems (fuel : Nat) (st : RuntimeState) (items : Program) :
-    Result Control :=
-  match fuel with
-  | 0 => .outOfFuel st
-  | fuel' + 1 =>
-      match items with
-      | [] => .ok st .normal
-      | item :: rest =>
-          if topItemContainsQuit item then
-            .ok { st with stopped := true } .stop
-          else
-            match evalTopItem fuel' st item with
-            | .ok st .normal =>
-                if st.stopped then .ok st .stop else evalProgramItems fuel' st rest
-            | .ok st .stop => .ok st .stop
-            | .ok st .break => .runtimeError st "Break outside a loop"
-            | .ok st (.return _) => .runtimeError st "Return outside of a function"
-            | .outOfFuel st => .outOfFuel st
-            | .runtimeError st msg => .runtimeError st msg
-
-def runProgramWithState (fuel : Nat) (st : RuntimeState) (program : Program) : RunResult :=
-  match evalProgramItems fuel st program with
-  | .ok st _ => .success st
+private def stepExprStmt (fuel : Nat) (st : RuntimeState) (expr : Expr)
+    (tasks : List Task) : StepResult :=
+  match evalExpr fuel st expr with
+  | .ok st n =>
+      if isTopAssignment expr then
+        next st tasks
+      else
+        next (printNumLine st n) tasks
   | .outOfFuel st => .outOfFuel st
   | .runtimeError st msg => .runtimeError st msg
 
+private def stepStringStmt (st : RuntimeState) (s : String) (tasks : List Task) : StepResult :=
+  next (appendOutput st (decodeBcString s)) tasks
+
+private def stepCond (fuel : Nat) (st : RuntimeState) (cond : Expr)
+    (onTrue : RuntimeState → List Task) (tasks : List Task) : StepResult :=
+  match evalExpr fuel st cond with
+  | .ok st n =>
+      if n.isZero then
+        next st tasks
+      else
+        next st (onTrue st ++ tasks)
+  | .outOfFuel st => .outOfFuel st
+  | .runtimeError st msg => .runtimeError st msg
+
+def step (fuel : Nat) (config : Config) : StepResult :=
+  match fuel with
+  | 0 => .outOfFuel config.state
+  | fuel' + 1 =>
+      match config.tasks with
+      | [] => .done config.state
+      | task :: tasks =>
+          match task with
+          | .topItems [] => next config.state tasks
+          | .topItems (item :: rest) =>
+              if topItemContainsQuit item then
+                .done { config.state with stopped := true }
+              else
+                next config.state (.topItem item :: .topItems rest :: tasks)
+          | .topItem (.funDef defn) =>
+              next (setFunction config.state defn) tasks
+          | .topItem (.stmts ss) =>
+              next config.state (.stmts ss :: tasks)
+          | .stmts [] => next config.state tasks
+          | .stmts (stmt :: rest) =>
+              next config.state (.stmt stmt :: .stmts rest :: tasks)
+          | .body [] => next config.state tasks
+          | .body (.newline :: rest) =>
+              next config.state (.body rest :: tasks)
+          | .body (.stmts ss :: rest) =>
+              next config.state (.stmts ss :: .body rest :: tasks)
+          | .stmt (.expr e) => stepExprStmt fuel' config.state e tasks
+          | .stmt (.str s) => stepStringStmt config.state s tasks
+          | .stmt (.auto _) => next config.state tasks
+          | .stmt (.if cond thenBranch) =>
+              stepCond fuel' config.state cond (fun _ => [.stmt thenBranch]) tasks
+          | .stmt (.while cond body) =>
+              stepCond fuel' config.state cond (fun _ => [.stmt body, .whileLoop cond body]) tasks
+          | .stmt (.for init cond update body) =>
+              match evalExpr fuel' config.state init with
+              | .ok st _ => next st (.forCheck cond update body :: tasks)
+              | .outOfFuel st => .outOfFuel st
+              | .runtimeError st msg => .runtimeError st msg
+          | .stmt .break => propagateBreak config.state tasks
+          | .stmt (.return value?) =>
+              match value? with
+              | none => propagateReturn config.state none tasks
+              | some valueExpr =>
+                  match evalExpr fuel' config.state valueExpr with
+                  | .ok st value => propagateReturn st (some value) tasks
+                  | .outOfFuel st => .outOfFuel st
+                  | .runtimeError st msg => .runtimeError st msg
+          | .stmt .quit =>
+              .control { config.state with stopped := true } .stop
+          | .stmt (.block body) =>
+              next config.state (.body body :: tasks)
+          | .whileLoop cond body =>
+              stepCond fuel' config.state cond (fun _ => [.stmt body, .whileLoop cond body]) tasks
+          | .forCheck cond update body =>
+              stepCond fuel' config.state cond
+                (fun _ => [.stmt body, .forAfterBody cond update body]) tasks
+          | .forAfterBody cond update body =>
+              match evalExpr fuel' config.state update with
+              | .ok st _ => next st (.forCheck cond update body :: tasks)
+              | .outOfFuel st => .outOfFuel st
+              | .runtimeError st msg => .runtimeError st msg
+
+private def runBodyConfig : Nat → Config → Result Control
+  | 0, config => .outOfFuel config.state
+  | fuel + 1, config =>
+      match step (fuel + 1) config with
+      | .next config => runBodyConfig fuel config
+      | .done st => .ok st .normal
+      | .control st control => .ok st control
+      | .outOfFuel st => .outOfFuel st
+      | .runtimeError st msg => .runtimeError st msg
+
+def evalBody (fuel : Nat) (st : RuntimeState) (body : List BodyItem) : Result Control :=
+  runBodyConfig fuel { state := st, tasks := [.body body] }
+
+end
+
+def initialConfig (st : RuntimeState) (program : Program) : Config :=
+  { state := st, tasks := [.topItems program] }
+
+def runConfig : Nat → Config → RunResult
+  | 0, config => .outOfFuel config.state
+  | fuel + 1, config =>
+      match step (fuel + 1) config with
+      | .next config => runConfig fuel config
+      | .done st => .success st
+      | .control st .normal => .success st
+      | .control st .stop => .success st
+      | .control st .break => .runtimeError st "Break outside a loop"
+      | .control st (.return _) => .runtimeError st "Return outside of a function"
+      | .outOfFuel st => .outOfFuel st
+      | .runtimeError st msg => .runtimeError st msg
+
+def runProgramWithState (fuel : Nat) (st : RuntimeState) (program : Program) : RunResult :=
+  runConfig fuel (initialConfig st program)
+
 def runProgram (fuel : Nat) (program : Program) : RunResult :=
   runProgramWithState fuel initialState program
+
+end SmallStep
 
 end Bc

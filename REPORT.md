@@ -233,7 +233,7 @@ make lean-build   # warning-clean
 
 ## Step 4 — Review and repair of Step 3 AST/constraint implementation
 
-**Agent:** Codex (GPT-5.5 xhigh)  
+**Agent:** Codex (GPT-5.5 xhigh)
 **Duration:** ~20 minutes wall-clock, including a roughly **12 minute**
 fix/retest loop.
 
@@ -320,7 +320,7 @@ make test
 
 ## Step 5 — Human-guided correction of parser scope and proof boundary
 
-**Agent:** Codex (GPT-5.5 xhigh)  
+**Agent:** Codex (GPT-5.5 xhigh)
 **Duration:** ~40 minutes.
 
 This step records a human-guided review of the Step 3/4 direction. The focus was
@@ -409,8 +409,9 @@ that run fixtures through the interpreter and compare outputs against the GNU
 
 | Area | Location |
 |------|----------|
+| Runtime and numeric helpers | `Bc/Runtime.lean` |
 | Big-step evaluator | `Bc/BigStep.lean` |
-| CLI runner | `Main.lean` (`bc-lean [--fuel N] [-l|--mathlib] file...`) |
+| CLI runner | `Main.lean` (`bc-lean [--fuel N] [--semantics big|small] [-l|--mathlib] file...`) |
 | Eval regression harness | `scripts/run_eval_tests.sh` |
 | Make target | `make eval-test`; `make test` now runs AST + eval tests |
 
@@ -469,15 +470,6 @@ make test
 # Skipped: 0
 ```
 
-### Notes and limitations
-
-The evaluator is intended as an executable semantics, not a diagnostics layer.
-It reports runtime errors for invalid control-flow/runtime cases but does not
-attempt to reproduce every `bc -s` / `bc -w` compile-time warning. The decimal
-number implementation was validated against the checked-in reference corpus,
-including heavy arithmetic and libmath tests, but it remains a Lean model rather
-than a direct binding to GNU bc's `lib/number.c`.
-
 ---
 
 ## Step 7 — Human-guided POSIX consolidation and evaluator cleanup
@@ -528,4 +520,142 @@ make test
 # Passed: 37
 # Failed: 0
 # Skipped: 0
+```
+
+---
+
+## Step 8 — Small-step operational semantics
+
+**Agent:** Codex (GPT-5.5 xhigh)
+**Duration:** ~30 min.
+
+### Request
+
+Add a pure small-step operational semantics in `Bc/SmallStep.lean`, with a
+fuel-bounded evaluator that repeatedly steps until termination or fuel
+exhaustion. Update the evaluator test runner so tests can select which semantics
+to use, and update Make targets so evaluator tests run against both semantics.
+The implementation follows the small-step idea from Software Foundations'
+Programming Language Foundations chapter on small-step semantics:
+`https://softwarefoundations.cis.upenn.edu/plf-current/Smallstep.html`.
+
+### Implementation
+
+- Added `Bc/SmallStep.lean`, a pure control-machine semantics with explicit
+  `Task` continuations, a `Config`, a single-step function, and a fuel-bounded
+  `runConfig` / `runProgramWithState`.
+- Small-step execution reduces top-level items, statement lists, bodies, blocks,
+  loops, `break`, `return`, and `quit` through explicit control steps.
+  Expression, function-body, statement, and top-level transitions are local to
+  `Bc.SmallStep`; it does not import or delegate to `Bc.BigStep`.
+- Shared code is limited to `Bc.Runtime`: numeric operations, runtime state,
+  result/control datatypes, output helpers, and environment update helpers.
+  This is intentional because bc expressions can mutate state and call
+  functions, so expression evaluation belongs to each concrete semantics.
+- Added CLI selection in `Main.lean`: `--semantics big|small`, plus
+  `--big-step` and `--small-step`.
+- Extended `scripts/run_eval_tests.sh` with `--semantics big|small` and the
+  `BC_LEAN_SEMANTICS` environment variable.
+- Updated `Makefile`: `make eval-test` now runs both `eval-test-big` and
+  `eval-test-small`. Small-step eval tests use a larger default fuel budget
+  because control steps are finer-grained than big-step evaluation.
+
+### Verification
+
+```bash
+lake build
+# Build completed successfully.
+
+shellcheck scripts/run_eval_tests.sh scripts/run_ast_tests.sh \
+  scripts/update_ast_tests.sh scripts/parse_all_tests.sh
+# no findings
+
+make test
+# AST Test Summary:
+# Passed: 38
+# Failed: 0
+# Skipped: 0
+#
+# Eval Test Summary (big):
+# Passed: 37
+# Failed: 0
+# Skipped: 0
+#
+# Eval Test Summary (small):
+# Passed: 37
+# Failed: 0
+# Skipped: 0
+
+make parser-all
+# parse_all_tests: 37 passed, 0 failed (37 total)
+```
+
+### Notes and limitations
+
+The evaluator is intended as an executable semantics, not a diagnostics layer.
+It reports runtime errors for invalid control-flow/runtime cases but does not
+attempt to reproduce every `bc -s` / `bc -w` compile-time warning. The decimal
+number implementation was validated against the checked-in reference corpus,
+including heavy arithmetic and libmath tests, but it remains a Lean model rather
+than a direct binding to GNU bc's `lib/number.c`.
+
+---
+
+## Step 9 — Human-guided big-step/small-step split and code reorganization
+
+**Agent:** Codex (GPT-5.5 xhigh)
+**Duration:** ~1 hour.
+
+This step records a human-guided correction after the first small-step
+implementation. The initial version made `Bc.SmallStep` import `Bc.BigStep`,
+which blurred the distinction between the two operational semantics. The follow
+up reorganized the code so big-step and small-step are sibling implementations
+over a shared runtime layer.
+
+### Changes
+
+1. **Split shared runtime code out of big-step.** Added `Bc/Runtime.lean` for
+   numeric operations, `RuntimeState`, `Result`, `RunResult`, `Control`, output
+   helpers, function/array/scalar environment helpers, and other runtime update
+   utilities.
+2. **Made the semantics independent siblings.** `Bc.BigStep` and
+   `Bc.SmallStep` now both import `Bc.Runtime`; `Bc.SmallStep` no longer imports
+   or delegates to `Bc.BigStep`. Only `Main.lean` imports both semantics to
+   dispatch the CLI-selected evaluator.
+3. **Kept expression evaluation concrete per semantics.** Because bc expressions
+   can mutate state through assignment, increment/decrement, array allocation,
+   and function calls, expression evaluation was not treated as a pure shared
+   evaluator. Each semantics owns its own expression/body/statement evaluation
+   path, while sharing only runtime helper operations.
+4. **Updated project documentation.** Refreshed `README.md`, `AGENTS.md`, and
+   this report to describe `Bc.Runtime` and the intended dependency structure.
+
+### Verification
+
+```bash
+lake build
+# Build completed successfully (24 jobs).
+
+shellcheck scripts/run_eval_tests.sh scripts/run_ast_tests.sh \
+  scripts/update_ast_tests.sh scripts/parse_all_tests.sh
+# no findings
+
+make test
+# AST Test Summary:
+# Passed: 38
+# Failed: 0
+# Skipped: 0
+#
+# Eval Test Summary (big):
+# Passed: 37
+# Failed: 0
+# Skipped: 0
+#
+# Eval Test Summary (small):
+# Passed: 37
+# Failed: 0
+# Skipped: 0
+
+make parser-all
+# parse_all_tests: 37 passed, 0 failed (37 total)
 ```

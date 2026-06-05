@@ -53,10 +53,10 @@ cache-refresh:
 lean-build: cache
 	lake build
 
-# Build a single Lean file. FILE = module name (e.g. Bc.Eval) or path (e.g. Bc/Eval.lean).
-# Example: make lean-build-file FILE=Bc/Eval.lean
+# Build a single Lean file. FILE = module name (e.g. Bc.BigStep) or path (e.g. Bc/BigStep.lean).
+# Example: make lean-build-file FILE=Bc/BigStep.lean
 lean-build-file: cache
-	@if [ -z "$(FILE)" ]; then echo "Usage: make lean-build-file FILE=Bc/Eval.lean"; exit 1; fi
+	@if [ -z "$(FILE)" ]; then echo "Usage: make lean-build-file FILE=Bc/BigStep.lean"; exit 1; fi
 	@MODULE=$$(echo "$(FILE)" | sed 's|/|.|g' | sed 's|\.lean$$||'); lake build $$MODULE
 
 # Run a .bc file. BC = path to the .bc source file.

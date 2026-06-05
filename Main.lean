@@ -1,5 +1,4 @@
-import Bc.Basic
-import Bc.Eval
+import Bc.BigStep
 import Bc.Parser
 
 open Bc

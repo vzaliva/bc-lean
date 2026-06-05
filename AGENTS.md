@@ -63,7 +63,7 @@ make ast-test-update                   # refresh golden files
 # Build everything (Lean libraries and the interpreter)
 make                                   # == make lean-build
 make lean-build                        # Build Lean libraries and executables
-make lean-build-file FILE=Bc/Eval.lean # Build one module (path or dotted name, e.g. Bc.Eval)
+make lean-build-file FILE=Bc/BigStep.lean # Build one module (path or dotted name, e.g. Bc.BigStep)
 
 # Running the interpreter
 make run BC=examples/hello.bc          # Run a .bc file

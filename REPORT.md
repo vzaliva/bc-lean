@@ -409,7 +409,7 @@ that run fixtures through the interpreter and compare outputs against the GNU
 
 | Area | Location |
 |------|----------|
-| Big-step evaluator | `Bc/Eval.lean` |
+| Big-step evaluator | `Bc/BigStep.lean` |
 | CLI runner | `Main.lean` (`bc-lean [--fuel N] [-l|--mathlib] file...`) |
 | Eval regression harness | `scripts/run_eval_tests.sh` |
 | Make target | `make eval-test`; `make test` now runs AST + eval tests |
@@ -417,7 +417,7 @@ that run fixtures through the interpreter and compare outputs against the GNU
 ### Semantics implemented
 
 - Total, fuel-bounded mutually recursive semantic functions; no `partial`,
-  `sorry`, or axioms in `Bc/Eval.lean`.
+  `sorry`, or axioms in `Bc/BigStep.lean`.
 - Runtime state for globals, stacked function frames, autos, arrays, function
   definitions, `ibase`, `obase`, `scale`, output, and stop state.
 - Executable decimal number model with bc-style scale rules for addition,
@@ -501,7 +501,7 @@ definitional interpreter.
    goldens for syntax and behavior outside that scope, regenerated parser
    artifacts, and refreshed AST expected output.
 3. **Removed `IO` from the semantics.** After POSIX pruning removed input and
-   nondeterministic effects from the language model, `Bc.Eval` was refactored so
+   nondeterministic effects from the language model, `Bc.BigStep` was refactored so
    semantic functions return `Result` / `RunResult` directly. `IO` remains only
    in the CLI/parser layer for file access and output.
 

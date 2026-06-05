@@ -40,22 +40,15 @@ eval-test-small: lean-build parser config.json
 parser-clean:
 	$(MAKE) -C parser clean
 
-# Download precompiled Lean caches for mathlib/upstreams (idempotent).
-# Uses a sentinel file to avoid re-downloading if the cache already exists.
-.lake/.cache-downloaded:
-	@mkdir -p .lake
-	@echo "Downloading Lean cache..."
-	@lake exe cache get && touch .lake/.cache-downloaded
+# The project has no external dependencies (only the Lean toolchain's `Std` and
+# core tactics), so there is no mathlib cache to download. `cache` is kept as a
+# no-op so dependent targets and existing workflows keep working.
+cache:
+	@:
 
-cache: .lake/.cache-downloaded
-
-# Force a fresh cache (good after toolchain/mathlib bumps).
+# Force a clean rebuild (e.g. after a toolchain bump).
 cache-refresh:
 	lake clean
-	rm -rf .lake
-	mkdir -p .lake
-	lake exe cache get!
-	touch .lake/.cache-downloaded
 
 lean-build: cache
 	lake build

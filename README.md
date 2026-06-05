@@ -20,6 +20,34 @@ programs. The current parser work targets the POSIX/standard subset; use
 The reference implementation (`bc-1.07.1/`) is unpacked locally for consultation
 but is not part of this repository.
 
+## Semantics and metatheory
+
+Two independent operational semantics are provided, both executable and
+fuel-bounded, and both cross-checked against GNU bc by `make eval-test`:
+
+- **Big-step** (`Bc/BigStep.lean`) — a recursive evaluator.
+- **Small-step** (`Bc/SmallStep.lean`) — a structural one-step function
+  `step : Config → StepResult` over source-shaped residual terms, with fuel only
+  in the runner.
+
+Shared, semantics-agnostic logic (numeric operators, assignment, builtins, and
+`quit` detection) lives in `Bc/Runtime.lean` so the two evaluators cannot drift
+on those points.
+
+**What is currently proved** (`Bc/Progress.lean`): the small-step transition
+relation has no stuck configurations — every configuration is either terminal
+(normal completion, propagated control, or a runtime error) or can take a step,
+and terminal configurations coincide with normal forms. Note this is established
+*by construction*: the relation is defined as the graph of the total function
+`step`, so the result certifies that `step` is total and its outcomes are
+exhaustively classified, rather than a Wright–Felleisen "well-typed programs do
+not get stuck" theorem (bc is untyped).
+
+**Not yet proved** (intended future metatheory): equivalence of the big-step and
+small-step semantics; adequacy of `step` against an independently-defined
+inductive reduction relation; and algebraic/canonical-form metatheory for the
+`Num` arbitrary-precision type.
+
 ## Parser (tree-sitter)
 
 A standalone tree-sitter grammar for POSIX bc surface syntax lives under
@@ -70,11 +98,13 @@ libmath-heavy tests when needed).
 make
 ```
 
-This downloads the precompiled mathlib cache (idempotent) and then runs
-`lake build`. To force a fresh cache after a toolchain or mathlib bump:
+The project has **no external Lean dependencies** — it uses only the Lean
+toolchain's `Std` library and core tactics — so there is nothing to download and
+`make` simply runs `lake build`. To force a clean rebuild (e.g. after a toolchain
+bump):
 
 ```bash
-make cache-refresh
+make cache-refresh   # equivalent to `lake clean`
 ```
 
 ### Run

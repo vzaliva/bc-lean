@@ -46,11 +46,18 @@ inductive Expr where
   | special (var : SpecialVar)
   | arrayAccess (name : Name) (index : Expr)
   | assign (lhs : LVal) (op : AssignOp) (rhs : Expr)
+  /-- Relational expression. POSIX bc permits only a *single* relational operator
+      and only inside a condition; this is an intentional super-set (the chain is
+      evaluated left-associatively, yielding 0/1) because the parser is kept
+      syntax-only and does not enforce the contextual restriction. -/
   | rel (first : Expr) (rest : List (RelOp × Expr))
   | bin (op : BinOp) (lhs : Expr) (rhs : Expr)
   | unary (op : UnOp) (arg : Expr)
   | call (name : Name) (args : List Arg)
   | builtin (fn : Builtin) (arg : Option Expr)
+  /-- Parenthesised expression. Semantically transparent (both evaluators just
+      recurse); retained so the AST round-trips faithfully through the
+      pretty-printer for golden tests. -/
   | paren (body : Expr)
   deriving Repr
 
@@ -69,6 +76,9 @@ mutual
 inductive Stmt where
   | expr (e : Expr)
   | str (value : String)
+  /-- `auto` declaration. Only meaningful at the head of a function body (where
+      the evaluator collects it via `collectAutos`); modelled as a statement to
+      keep the parser syntax-only, and treated as a no-op when executed. -/
   | auto (params : List ParamDecl)
   | if (cond : Expr) (thenBranch : Stmt)
   | while (cond : Expr) (body : Stmt)

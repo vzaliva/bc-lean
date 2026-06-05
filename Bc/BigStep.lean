@@ -46,15 +46,7 @@ def evalExpr (fuel : Nat) (st : RuntimeState) (expr : Expr) : Result Num :=
           | .ok st a =>
               match evalExpr fuel' st rhs with
               | .ok st b =>
-                  let result? :=
-                    match op with
-                    | .add => Except.ok (Num.add a b)
-                    | .sub => Except.ok (Num.sub a b)
-                    | .mul => Except.ok (Num.mulWithScale a b st.scale)
-                    | .div => Num.div? a b st.scale
-                    | .mod => Num.modulo? a b st.scale
-                    | .pow => Num.pow? a b st.scale
-                  match result? with
+                  match applyBin? op a b st.scale with
                   | .ok n => .ok st n
                   | .error msg => .runtimeError st msg
               | .outOfFuel st => .outOfFuel st
@@ -117,16 +109,7 @@ def evalAssign (fuel : Nat) (st : RuntimeState) (lhs : LVal) (op : AssignOp) (rh
           match evalExpr fuel' st rhs with
           | .ok st rhsValue =>
               let old := readLValueTarget st target
-              let result? :=
-                match op with
-                | .assign => Except.ok rhsValue
-                | .addAssign => Except.ok (Num.add old rhsValue)
-                | .subAssign => Except.ok (Num.sub old rhsValue)
-                | .mulAssign => Except.ok (Num.mulWithScale old rhsValue st.scale)
-                | .divAssign => Num.div? old rhsValue st.scale
-                | .modAssign => Num.modulo? old rhsValue st.scale
-                | .powAssign => Num.pow? old rhsValue st.scale
-              match result? with
+              match applyAssign? op old rhsValue st.scale with
               | .ok n => .ok (writeLValueTarget st target n) n
               | .error msg => .runtimeError st msg
           | .outOfFuel st => .outOfFuel st
@@ -165,26 +148,16 @@ def evalBuiltin (fuel : Nat) (st : RuntimeState) (fn : Builtin) (arg : Option Ex
   match fuel with
   | 0 => .outOfFuel st
   | fuel' + 1 =>
-      match fn, arg with
-      | .length, some e =>
-          match evalExpr fuel' st e with
-          | .ok st n => .ok st (Num.ofInt (Int.ofNat n.length))
-          | .outOfFuel st => .outOfFuel st
-          | .runtimeError st msg => .runtimeError st msg
-      | .scale, some e =>
-          match evalExpr fuel' st e with
-          | .ok st n => .ok st (Num.ofInt (Int.ofNat n.scale))
-          | .outOfFuel st => .outOfFuel st
-          | .runtimeError st msg => .runtimeError st msg
-      | .sqrt, some e =>
+      match arg with
+      | none => .runtimeError st "invalid builtin arity"
+      | some e =>
           match evalExpr fuel' st e with
           | .ok st n =>
-              match Num.sqrt? n st.scale with
+              match applyBuiltin? fn n st.scale with
               | .ok r => .ok st r
               | .error msg => .runtimeError st msg
           | .outOfFuel st => .outOfFuel st
           | .runtimeError st msg => .runtimeError st msg
-      | _, _ => .runtimeError st "invalid builtin arity"
 
 def evalArgValues (fuel : Nat) (st : RuntimeState) (args : List Arg) :
     Result (List (Sum Num Name)) :=
@@ -356,39 +329,6 @@ def evalTopItem (fuel : Nat) (st : RuntimeState) : TopItem → Result Control
   | .funDef defn => .ok (setFunction st defn) .normal
   | .stmts ss => evalStmts fuel st ss
 
-mutual
-
-private def stmtContainsQuit : Stmt → Bool
-  | .expr _ => false
-  | .str _ => false
-  | .auto _ => false
-  | .if _ thenBranch => stmtContainsQuit thenBranch
-  | .while _ body => stmtContainsQuit body
-  | .for _ _ _ body => stmtContainsQuit body
-  | .break => false
-  | .return _ => false
-  | .quit => true
-  | .block body => bodyContainsQuit body
-
-private def stmtsContainQuit : List Stmt → Bool
-  | [] => false
-  | stmt :: rest => stmtContainsQuit stmt || stmtsContainQuit rest
-
-private def bodyItemContainsQuit : BodyItem → Bool
-  | .stmts ss => stmtsContainQuit ss
-  | .newline => false
-
-private def bodyContainsQuit (body : List BodyItem) : Bool :=
-  match body with
-  | [] => false
-  | item :: rest => bodyItemContainsQuit item || bodyContainsQuit rest
-
-end
-
-private def topItemContainsQuit : TopItem → Bool
-  | .funDef defn => bodyContainsQuit defn.body
-  | .stmts ss => stmtsContainQuit ss
-
 def evalProgramItems (fuel : Nat) (st : RuntimeState) (items : Program) :
     Result Control :=
   match fuel with
@@ -397,7 +337,7 @@ def evalProgramItems (fuel : Nat) (st : RuntimeState) (items : Program) :
       match items with
       | [] => .ok st .normal
       | item :: rest =>
-          if topItemContainsQuit item then
+          if TopItem.containsQuit item then
             .ok { st with stopped := true } .quit
           else
             match evalTopItem fuel' st item with

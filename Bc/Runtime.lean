@@ -12,6 +12,7 @@ import Bc.Syntax
 namespace Bc
 
 private def bcDimMax : Nat := 16777215
+private def bcInputBaseMax : Nat := 16
 private def bcBaseMax : Nat := 2147483647
 private def bcScaleMax : Nat := 2147483647
 
@@ -465,7 +466,7 @@ private def assignSpecial (st : RuntimeState) (v : SpecialVar) (n : Num) : Runti
       let raw := n.intPart
       let ibase :=
         if raw < 2 then 2
-        else if raw > 36 then 36
+        else if raw.natAbs > bcInputBaseMax then bcInputBaseMax
         else raw.natAbs
       { st with ibase := ibase }
   | .obase =>
@@ -540,6 +541,68 @@ def applyRel (op : RelOp) (a b : Num) : Bool :=
 def boolNum (b : Bool) : Num :=
   if b then Num.one else Num.zero
 
+/-- Apply a binary arithmetic operator to two evaluated numbers. Shared by both
+    semantics so the numeric behaviour cannot drift between them. -/
+def applyBin? (op : BinOp) (a b : Num) (scale : Nat) : Except String Num :=
+  match op with
+  | .add => .ok (Num.add a b)
+  | .sub => .ok (Num.sub a b)
+  | .mul => .ok (Num.mulWithScale a b scale)
+  | .div => Num.div? a b scale
+  | .mod => Num.modulo? a b scale
+  | .pow => Num.pow? a b scale
+
+/-- Apply a (possibly compound) assignment operator given the old and rhs values. -/
+def applyAssign? (op : AssignOp) (old rhs : Num) (scale : Nat) : Except String Num :=
+  match op with
+  | .assign => .ok rhs
+  | .addAssign => .ok (Num.add old rhs)
+  | .subAssign => .ok (Num.sub old rhs)
+  | .mulAssign => .ok (Num.mulWithScale old rhs scale)
+  | .divAssign => Num.div? old rhs scale
+  | .modAssign => Num.modulo? old rhs scale
+  | .powAssign => Num.pow? old rhs scale
+
+/-- Apply a unary builtin to an evaluated argument value. -/
+def applyBuiltin? (fn : Builtin) (value : Num) (scale : Nat) : Except String Num :=
+  match fn with
+  | .length => .ok (Num.ofInt (Int.ofNat value.length))
+  | .scale => .ok (Num.ofInt (Int.ofNat value.scale))
+  | .sqrt => Num.sqrt? value scale
+
+/- Source-level `quit` detection. GNU bc acts on `quit` when it is *read*, so a
+   top-level item containing `quit` anywhere (even in an unreachable branch) ends
+   the program before that item runs. Shared by both semantics. -/
+mutual
+def Stmt.containsQuit : Stmt → Bool
+  | .expr _ => false
+  | .str _ => false
+  | .auto _ => false
+  | .if _ thenBranch => Stmt.containsQuit thenBranch
+  | .while _ body => Stmt.containsQuit body
+  | .for _ _ _ body => Stmt.containsQuit body
+  | .break => false
+  | .return _ => false
+  | .quit => true
+  | .block body => bodyContainsQuit body
+
+def stmtsContainQuit : List Stmt → Bool
+  | [] => false
+  | stmt :: rest => Stmt.containsQuit stmt || stmtsContainQuit rest
+
+def bodyItemContainsQuit : BodyItem → Bool
+  | .stmts ss => stmtsContainQuit ss
+  | .newline => false
+
+def bodyContainsQuit : List BodyItem → Bool
+  | [] => false
+  | item :: rest => bodyItemContainsQuit item || bodyContainsQuit rest
+end
+
+def TopItem.containsQuit : TopItem → Bool
+  | .funDef defn => bodyContainsQuit defn.body
+  | .stmts ss => stmtsContainQuit ss
+
 def lvalOfExpr? : Expr → Option LVal
   | .var n => some (.var n)
   | .special v => some (.special v)
@@ -598,7 +661,7 @@ def bumpLValueTarget (st : RuntimeState) (target : LValueTarget) (up : Bool) :
   let old := readLValueTarget st target
   match target with
   | .special .ibase =>
-      let newBase := if up then (if st.ibase < 16 then st.ibase + 1 else st.ibase)
+      let newBase := if up then (if st.ibase < bcInputBaseMax then st.ibase + 1 else st.ibase)
         else (if st.ibase > 2 then st.ibase - 1 else st.ibase)
       let newValue := Num.ofInt (Int.ofNat newBase)
       ({ st with ibase := newBase }, old, newValue)

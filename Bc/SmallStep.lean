@@ -134,25 +134,6 @@ private def returnValue : Option Num → Num
 private def popFrame (st : RuntimeState) : RuntimeState :=
   { st with frames := st.frames.drop 1 }
 
-private def applyBin? (op : BinOp) (a b : Num) (scale : Nat) : Except String Num :=
-  match op with
-  | .add => Except.ok (Num.add a b)
-  | .sub => Except.ok (Num.sub a b)
-  | .mul => Except.ok (Num.mulWithScale a b scale)
-  | .div => Num.div? a b scale
-  | .mod => Num.modulo? a b scale
-  | .pow => Num.pow? a b scale
-
-private def applyAssign? (op : AssignOp) (old rhs : Num) (scale : Nat) : Except String Num :=
-  match op with
-  | .assign => Except.ok rhs
-  | .addAssign => Except.ok (Num.add old rhs)
-  | .subAssign => Except.ok (Num.sub old rhs)
-  | .mulAssign => Except.ok (Num.mulWithScale old rhs scale)
-  | .divAssign => Num.div? old rhs scale
-  | .modAssign => Num.modulo? old rhs scale
-  | .powAssign => Num.pow? old rhs scale
-
 mutual
 
 def ExprTerm.ofExpr : Expr → ExprTerm
@@ -274,7 +255,7 @@ end
 
 private def TopItemTerm.containsQuit (item : TopItemTerm) : Bool :=
   match item with
-  | .funDef defn => BodyTerm.containsQuit (BodyTerm.ofBody defn.body)
+  | .funDef defn => bodyContainsQuit defn.body
   | TopItemTerm.stmt s => StmtTerm.containsQuit s
 
 private def TopItemTerm.ofTermStmts : List StmtTerm → List TopItemTerm
@@ -285,8 +266,7 @@ def TopItemTerm.ofTopItem (item : TopItem) : List TopItemTerm :=
   match item with
   | .funDef defn => [.funDef defn]
   | .stmts ss =>
-      let terms := StmtTerm.ofStmts ss
-      if StmtTerm.listContainsQuit terms then [.stmt .quit] else TopItemTerm.ofTermStmts terms
+      if stmtsContainQuit ss then [.stmt .quit] else TopItemTerm.ofTermStmts (StmtTerm.ofStmts ss)
 
 def ProgramTerm.ofProgram : Program → ProgramTerm
   | [] => []
@@ -423,12 +403,8 @@ def stepExpr (st : RuntimeState) : ExprTerm → ExprOutcome
           .runtimeError (popFrame st) msg
   | .builtin _ none =>
       .runtimeError st "invalid builtin arity"
-  | .builtin .length (some (.value value)) =>
-      .next st (.value (Num.ofInt (Int.ofNat value.length)))
-  | .builtin .scale (some (.value value)) =>
-      .next st (.value (Num.ofInt (Int.ofNat value.scale)))
-  | .builtin .sqrt (some (.value value)) =>
-      match Num.sqrt? value st.scale with
+  | .builtin fn (some (.value value)) =>
+      match applyBuiltin? fn value st.scale with
       | .ok result => .next st (.value result)
       | .error msg => .runtimeError st msg
   | .builtin fn (some arg) =>

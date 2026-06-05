@@ -53,19 +53,20 @@ theorem progress (config : Config) :
 theorem terminal_is_normal_form {config : Config}
     (h : Terminal config) : NormalForm Transition config := by
   intro hstep
-  rcases hstep with ⟨config', htransition⟩
-  cases htransition with
-  | ofNext hnext =>
-      cases h with
-      | done _ hterminal =>
-          rw [hterminal] at hnext
-          cases hnext
-      | control _ _ hterminal =>
-          rw [hterminal] at hnext
-          cases hnext
-      | runtimeError _ _ hterminal =>
-          rw [hterminal] at hnext
-          cases hnext
+  cases hstep with
+  | intro config' htransition =>
+      cases htransition with
+      | ofNext hnext =>
+          cases h with
+          | done _ hterminal =>
+              rw [hterminal] at hnext
+              cases hnext
+          | control _ _ hterminal =>
+              rw [hterminal] at hnext
+              cases hnext
+          | runtimeError _ _ hterminal =>
+              rw [hterminal] at hnext
+              cases hnext
 
 /-- A normal form for the transition relation must be terminal. -/
 theorem normal_form_is_terminal {config : Config}

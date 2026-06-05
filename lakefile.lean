@@ -1,9 +1,9 @@
 import Lake
 open Lake DSL
 
-require mathlib from git
-  "https://github.com/leanprover-community/mathlib4" @ "v4.30.0"
-
+-- No external dependencies: the project uses only the Lean toolchain's `Std`
+-- (e.g. `Std.Data.TreeMap`, `Std.Internal.Parsec` in the XML bridge) and core
+-- tactics, so it needs neither mathlib nor batteries.
 package «bc-lean» where
   -- Default targets are set via `@[default_target]` on declarations below
   restoreAllArtifacts := true

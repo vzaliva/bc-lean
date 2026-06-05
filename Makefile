@@ -3,7 +3,7 @@
 all: lean-build
 
 BIG_STEP_FUEL ?= 200000
-SMALL_STEP_FUEL ?= 10000000
+SMALL_STEP_FUEL ?= 100000000
 
 # --- tree-sitter bc parser (standalone; no Lean dependency) ---
 

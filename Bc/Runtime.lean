@@ -288,6 +288,12 @@ end Num
 abbrev BcArray := List (Nat × Num)
 abbrev ArrayId := Nat
 
+inductive LValueTarget where
+  | scalar (name : Name)
+  | special (var : SpecialVar)
+  | arrayElem (id : ArrayId) (index : Nat)
+  deriving Repr, BEq, DecidableEq
+
 structure Frame where
   scalars : List (Name × Num) := []
   arrays : List (Name × ArrayId) := []
@@ -575,41 +581,40 @@ def isTopAssignment : Expr → Bool
   | .assign _ _ _ => true
   | _ => false
 
-def readRef (st : RuntimeState) (ref : Sum (Name ⊕ SpecialVar) (ArrayId × Nat)) : Num :=
-  match ref with
-  | .inl (.inl name) => lookupScalar st name
-  | .inl (.inr v) => specialValue st v
-  | .inr (id, idx) => getArrayElem st id idx
+def readLValueTarget (st : RuntimeState) (target : LValueTarget) : Num :=
+  match target with
+  | .scalar name => lookupScalar st name
+  | .special v => specialValue st v
+  | .arrayElem id idx => getArrayElem st id idx
 
-def writeRef (st : RuntimeState) (ref : Sum (Name ⊕ SpecialVar) (ArrayId × Nat)) (value : Num) :
-    RuntimeState :=
-  match ref with
-  | .inl (.inl name) => setScalar st name value
-  | .inl (.inr v) => assignSpecial st v value
-  | .inr (id, idx) => setArrayElem st id idx value
+def writeLValueTarget (st : RuntimeState) (target : LValueTarget) (value : Num) : RuntimeState :=
+  match target with
+  | .scalar name => setScalar st name value
+  | .special v => assignSpecial st v value
+  | .arrayElem id idx => setArrayElem st id idx value
 
-def bumpRef (st : RuntimeState) (ref : Sum (Name ⊕ SpecialVar) (ArrayId × Nat)) (up : Bool) :
+def bumpLValueTarget (st : RuntimeState) (target : LValueTarget) (up : Bool) :
     RuntimeState × Num × Num :=
-  let old := readRef st ref
-  match ref with
-  | .inl (.inr .ibase) =>
+  let old := readLValueTarget st target
+  match target with
+  | .special .ibase =>
       let newBase := if up then (if st.ibase < 16 then st.ibase + 1 else st.ibase)
         else (if st.ibase > 2 then st.ibase - 1 else st.ibase)
       let newValue := Num.ofInt (Int.ofNat newBase)
       ({ st with ibase := newBase }, old, newValue)
-  | .inl (.inr .obase) =>
+  | .special .obase =>
       let newBase := if up then (if st.obase < bcBaseMax then st.obase + 1 else st.obase)
         else (if st.obase > 2 then st.obase - 1 else st.obase)
       let newValue := Num.ofInt (Int.ofNat newBase)
       ({ st with obase := newBase }, old, newValue)
-  | .inl (.inr .scale) =>
+  | .special .scale =>
       let newScale := if up then (if st.scale < bcScaleMax then st.scale + 1 else st.scale)
         else (if st.scale > 0 then st.scale - 1 else st.scale)
       let newValue := Num.ofInt (Int.ofNat newScale)
       ({ st with scale := newScale }, old, newValue)
   | _ =>
       let newValue := if up then Num.add old Num.one else Num.sub old Num.one
-      (writeRef st ref newValue, old, newValue)
+      (writeLValueTarget st target newValue, old, newValue)
 
 def bindParams (st : RuntimeState) (params : List ParamDecl) (args : List (Sum Num Name)) :
     Except String RuntimeState := do

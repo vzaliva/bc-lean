@@ -88,21 +88,21 @@ def evalRelChain (fuel : Nat) (st : RuntimeState) (left : Num)
           | .outOfFuel st => .outOfFuel st
           | .runtimeError st msg => .runtimeError st msg
 
-def evalLValRef (fuel : Nat) (st : RuntimeState) (lv : LVal) :
-    Result (Sum (Name ⊕ SpecialVar) (ArrayId × Nat)) :=
+def evalLValueTarget (fuel : Nat) (st : RuntimeState) (lv : LVal) :
+    Result LValueTarget :=
   match fuel with
   | 0 => .outOfFuel st
   | fuel' + 1 =>
       match lv with
-      | .var n => .ok st (Sum.inl (Sum.inl n))
-      | .special v => .ok st (Sum.inl (Sum.inr v))
+      | .var n => .ok st (.scalar n)
+      | .special v => .ok st (.special v)
       | .array name idxExpr =>
           match evalExpr fuel' st idxExpr with
           | .ok st idxNum =>
               match indexOfNum? idxNum with
               | .ok idx =>
                   let (st, id) := ensureArrayId st name
-                  .ok st (Sum.inr (id, idx))
+                  .ok st (.arrayElem id idx)
               | .error msg => .runtimeError st msg
           | .outOfFuel st => .outOfFuel st
           | .runtimeError st msg => .runtimeError st msg
@@ -112,11 +112,11 @@ def evalAssign (fuel : Nat) (st : RuntimeState) (lhs : LVal) (op : AssignOp) (rh
   match fuel with
   | 0 => .outOfFuel st
   | fuel' + 1 =>
-      match evalLValRef fuel' st lhs with
-      | .ok st ref =>
+      match evalLValueTarget fuel' st lhs with
+      | .ok st target =>
           match evalExpr fuel' st rhs with
           | .ok st rhsValue =>
-              let old := readRef st ref
+              let old := readLValueTarget st target
               let result? :=
                 match op with
                 | .assign => Except.ok rhsValue
@@ -127,7 +127,7 @@ def evalAssign (fuel : Nat) (st : RuntimeState) (lhs : LVal) (op : AssignOp) (rh
                 | .modAssign => Num.modulo? old rhsValue st.scale
                 | .powAssign => Num.pow? old rhsValue st.scale
               match result? with
-              | .ok n => .ok (writeRef st ref n) n
+              | .ok n => .ok (writeLValueTarget st target n) n
               | .error msg => .runtimeError st msg
           | .outOfFuel st => .outOfFuel st
           | .runtimeError st msg => .runtimeError st msg
@@ -149,9 +149,10 @@ def evalUnary (fuel : Nat) (st : RuntimeState) (op : UnOp) (arg : Expr) :
           match lvalOfExpr? arg with
           | none => .runtimeError st "increment/decrement operand is not an lvalue"
           | some lv =>
-              match evalLValRef fuel' st lv with
-              | .ok st ref =>
-                  let (st, old, newValue) := bumpRef st ref (op == .preIncr || op == .postIncr)
+              match evalLValueTarget fuel' st lv with
+              | .ok st target =>
+                  let (st, old, newValue) :=
+                    bumpLValueTarget st target (op == .preIncr || op == .postIncr)
                   match op with
                   | .preIncr | .preDecr => .ok st newValue
                   | .postIncr | .postDecr => .ok st old

@@ -659,3 +659,86 @@ make test
 make parser-all
 # parse_all_tests: 37 passed, 0 failed (37 total)
 ```
+
+---
+
+## Step 10 — Progress theorem for small-step semantics
+
+**Agent:** Codex (GPT-5.5 xhigh)
+**Duration:** ~1.5 hours.
+
+### Request
+
+Prove a Progress theorem for the small-step semantics, following the idea from
+Software Foundations' Programming Language Foundations chapter on small-step
+semantics:
+`https://softwarefoundations.cis.upenn.edu/plf-current/Smallstep.html`.
+Additional human review and guidance clarified that the theorem should
+ultimately be stated over a fuel-free small-step relation, with expressions
+evaluated by small steps rather than by a hidden recursive evaluator.
+
+### Implementation
+
+- Added `Bc/Progress.lean`.
+- Defined `SmallStep.Transition`, a relational view of one executable small-step
+  transition, where only `StepResult.next` outcomes are proper transitions.
+- Defined `SmallStep.Terminal` for terminal one-step outcomes of the
+  fuel-free machine: `.done`, `.control`, and `.runtimeError`.
+- Defined `NormalForm` and `Stuck` predicates.
+- Proved `SmallStep.progress`: every configuration is terminal or can step to
+  another configuration.
+- Proved supporting results:
+  - `terminal_is_normal_form`
+  - `normal_form_is_terminal`
+  - `normal_form_iff_terminal`
+  - `not_stuck`
+- Refactored `Bc/SmallStep.lean` so the semantic one-step function is
+  `step : Config -> StepResult`, with no fuel argument and no `.outOfFuel`
+  result.
+- Replaced the small-step module's hidden recursive expression evaluator with
+  expression tasks, value tasks, lvalue tasks, and continuation frames on the
+  same `Config`/task stack.
+- Kept fuel only in `runConfig`, `runProgramWithState`, and `evalBody` as an
+  executable interpreter bound.
+
+### Human-guided review
+
+The initial theorem was wrong for the intended semantics: it was adapted to the
+executable fuel-bounded interpreter wrapper and classified fuel exhaustion as a
+terminal outcome. Human review identified that this was only a no-stuck theorem
+for the runner, not the canonical semantic Progress theorem.
+
+Additional human guidance clarified the desired design: expressions should also
+be evaluated by small steps, using the same `Config`/task stack extended with
+expression tasks and continuation frames. The corrected theorem is now stated
+over the fuel-free small-step relation, matching the Software Foundations
+congruence-rule/evaluation-context approach more closely.
+
+### Verification
+
+```bash
+lake env lean Bc/SmallStep.lean
+# no diagnostics
+
+lake env lean Bc/Progress.lean
+# no diagnostics
+
+lake build
+# Build completed successfully (25 jobs).
+
+make test
+# AST Test Summary:
+# Passed: 38
+# Failed: 0
+# Skipped: 0
+#
+# Eval Test Summary (big):
+# Passed: 37
+# Failed: 0
+# Skipped: 0
+#
+# Eval Test Summary (small):
+# Passed: 37
+# Failed: 0
+# Skipped: 0
+```

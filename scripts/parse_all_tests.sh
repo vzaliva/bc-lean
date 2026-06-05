@@ -15,7 +15,8 @@ shopt -s globstar nullglob
 files=()
 for f in "$ROOT"/tests/**/*.b "$ROOT"/tests/**/*.bc; do
   case "$f" in
-    "$ROOT"/tests/constraints/*) continue ;;
+    "$ROOT"/tests/parse-invalid/*) continue ;;
+    "$ROOT"/tests/semantics/*) continue ;;
   esac
   files+=("$f")
 done

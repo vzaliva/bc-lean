@@ -16,7 +16,7 @@ arbitrary-precision calculator language.
 
 - **Parser** (`parser/`) — tree-sitter grammar for `.b`/`.bc` files (standalone;
   see README *Parser (tree-sitter)* section)
-- **Core implementation** (`Bc/`) — surface AST, tree-sitter bridge, constraints
+- **Core implementation** (`Bc/`) — surface AST and tree-sitter bridge
 - **Interpreter entry point** (`Main.lean`) — CLI (`bc-lean`; evaluator WIP)
 - **Parse test CLI** (`Bc/ParseTestMain.lean`) — `bc-parse-test` for AST goldens
 - **Reference source** (`bc-1.07.1/`) — the unpacked GNU bc 1.07.1 source, kept
@@ -31,6 +31,11 @@ arbitrary-precision calculator language.
 - **Warnings**: Avoid compilation warnings
 - **Unused binders**: Prefix unused variables and parameters with `_` so the
   tree stays warning-clean (warnings can fail CI or tests)
+- **Partial functions**: Keep the proof/model surface total. Do not use `partial`
+  in `Bc/Syntax.lean`, future operational semantics, or functions/predicates
+  intended to be referenced by AST or semantic definitions. `partial` is
+  acceptable in non-verified infrastructure such as the parser, XML bridge, and
+  golden-test pretty printer.
 - **Build verification**: Run `lake build` (or `make`) to check compilation
   before committing
 - **No parallel builds**: Do not run concurrent builds (including via parallel
@@ -47,7 +52,7 @@ arbitrary-precision calculator language.
 ```bash
 # tree-sitter bc parser (no Lean dependency)
 make parser                            # Build tree-sitter grammar
-make parser-test                       # Parse all tests/**/*.b and tests/**/*.bc
+make parser-test                       # Parse the upstream valid corpus
 make parser-all                        # Build + parse regression
 
 # Lean AST golden tests
@@ -85,10 +90,11 @@ Standalone bc parser for `.b` and `.bc` files. Grammar source:
 
 ### `Bc/` — Core Implementation
 
-Surface AST, tree-sitter XML bridge (`Bc/Parser.lean`), bc.y expression-context
-checks (`Bc/Constraints.lean`), and (future) operational semantics under the
-`Bc` namespace (`lakefile.lean` → `lean_lib Bc`). Modules avoid mathlib except
-where the evaluator will need it later.
+Surface AST, tree-sitter XML bridge (`Bc/Parser.lean`), and (future)
+operational semantics under the `Bc` namespace (`lakefile.lean` → `lean_lib Bc`).
+The parser is syntax-only; do not add context checks, diagnostics, or semantic
+checks to it. Modules avoid mathlib except where the evaluator will need it
+later.
 
 ### Other Components
 
@@ -106,11 +112,17 @@ semantics being extracted. When the modelled behaviour is unclear, consult it
 `bc-1.07.1/Test/` and `bc-1.07.1/Examples/` for behavioural examples). Do not
 modify or commit anything under `bc-1.07.1/`.
 
+For reference syntax checks, use GNU bc standard compile-only mode (`bc -s -c`,
+adding `-l` only when libmath is needed). Treat non-zero output from `bc -s -c`
+as outside the currently supported POSIX/standard syntax subset.
+
 ## Testing
 
-- **Tree-sitter:** `make parser-test` — syntax acceptance only.
+- **Tree-sitter:** `make parser-test` — valid-corpus syntax acceptance only.
 - **Lean AST:** `make test` — parses each corpus file via `bc-parse-test`, compares
-  to `tests/ast-expected/` (`.output` success, `.fail` for `tests/constraints/`).
+  to `tests/ast-expected/` (`.output` success, `.fail` for `tests/parse-invalid/`).
+- **Context/semantic fixtures:** `tests/semantics/` is reserved for later work and
+  is not exercised by parser or AST tests.
 - **Evaluator (planned):** golden output comparison against reference `bc`.
 
 ## Git and GitHub

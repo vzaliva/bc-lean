@@ -12,7 +12,8 @@ The target language is [GNU bc](https://www.gnu.org/software/bc/), version
 This project models bc's **operational semantics** as an executable Lean
 interpreter. There is no type checker — bc is an untyped arbitrary-precision
 calculator language, so the formalisation is an evaluator that runs `.bc`
-programs.
+programs. The current parser work targets the POSIX/standard subset; use
+`bc -s -c` when comparing syntax acceptance against the reference implementation.
 
 The reference implementation (`bc-1.07.1/`) is unpacked locally for consultation
 but is not part of this repository.
@@ -27,7 +28,7 @@ CLI](https://tree-sitter.github.io/tree-sitter/cli) (**0.25.x** recommended).
 
 ```bash
 make parser          # generate + build grammar; writes config.json
-make parser-test     # parse all tests/**/*.b and tests/**/*.bc
+make parser-test     # parse the upstream valid corpus
 make parser-all      # both of the above
 ```
 
@@ -52,7 +53,8 @@ Reference programs copied from GNU bc 1.07.1 are under `tests/` — see
 When parsing behaviour is unclear, consult the local reference tree (not
 committed): `bc-1.07.1/bc/bc.y`, `bc-1.07.1/bc/scan.l`, and
 `bc-1.07.1/doc/bc.texi`. The system `/usr/bin/bc` binary can confirm that a
-snippet is accepted as valid bc input (`bc -l file.b` for libmath-heavy tests).
+snippet is accepted as valid standard bc input (`bc -s -c file.b`; add `-l` for
+libmath-heavy tests when needed).
 
 ## Building
 
@@ -82,30 +84,30 @@ make run BC=examples/hello.bc
 # Parse to AST (golden test CLI)
 lake exe bc-parse-test tests/Test/array.b
 
-# AST golden tests (22 corpus + constraint fixtures)
+# AST golden tests (valid corpus + parser-invalid fixtures)
 make test
 ```
 
 ## AST parse tests
 
 Lean parses `.b`/`.bc` files via tree-sitter XML (`Bc/Parser.lean`), builds a
-surface AST (`Bc/Syntax.lean`), applies bc.y expression-context checks
-(`Bc/Constraints.lean`), and pretty-prints for regression:
+surface AST (`Bc/Syntax.lean`), and pretty-prints it for regression. The parser
+is intentionally syntax-only; context and semantic checks are postponed.
 
 ```bash
 make test              # same as make ast-test
 make ast-test-update   # refresh tests/ast-expected/ after intentional AST changes
 ```
 
-Expected outputs live under `tests/ast-expected/`; hand-written context and
-negative fixtures live under `tests/constraints/`. Tree-sitter-only checks remain
-`make parser-test` and cover only the upstream corpus files.
+Expected outputs live under `tests/ast-expected/`. Deliberately malformed parser
+fixtures live under `tests/parse-invalid/`; future context/semantic fixtures live
+under `tests/semantics/` and are not exercised by parser or AST tests.
 
 ## Project Structure
 
 - `parser/`          — tree-sitter grammar (`parser/tree-sitter-bc/`)
-- `tests/`           — bc reference programs for parser regression
-- `Bc/`            — surface AST, tree-sitter bridge, constraints (`Bc/` namespace)
+- `tests/`           — bc reference programs and parser/semantic fixtures
+- `Bc/`            — surface AST and tree-sitter bridge (`Bc` namespace)
 - `Main.lean`      — interpreter entry point
 - `lakefile.lean`  — Lake build configuration
 - `Makefile`       — convenience targets (build, cache, run, clean)

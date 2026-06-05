@@ -8,13 +8,12 @@ lab notebook for the experiment.
 
 ## Step 1 — Standalone tree-sitter parser (GNU bc 1.07.1)
 
-**Date:** 4 June 2026  
-**Model:** Cursor Agent (Composer)  
+**Model:** Cursor Agent (Composer-2.5)  
 **Duration:** ~45 minutes wall-clock for the full session (planning, plan
 refinement, and implementation in one chat). The implementation burst itself
-(files written and grammar iterated to green) spanned roughly **15:56–16:00
-PDT** (~4 minutes of filesystem activity), with most time spent on grammar
-conflict resolution and incremental test fixes.
+(files written and grammar iterated to green) was roughly **4 minutes** of
+filesystem activity, with most time spent on grammar conflict resolution and
+incremental test fixes.
 
 ### Rough prompt
 
@@ -87,8 +86,7 @@ executable semantics/evaluator with golden tests against `/usr/bin/bc`.
 
 ## Step 2 — Parser code review (correctness & accuracy)
 
-**Date:** 4 June 2026  
-**Agent:** Cursor Agent (Claude Opus 4.8)  
+**Agent:** Cursor Agent (Claude Opus 4.8 1M)  
 **Duration:** ~30 minutes (review, differential testing against `/usr/bin/bc`,
 grammar fixes, re-verification).
 
@@ -170,8 +168,7 @@ parse trees: `a<b<c` yields one flat `relational_expression` with two `rel_op`s;
 
 ## Step 3 — Lean AST, tree-sitter bridge, and golden parse tests
 
-**Date:** 4 June 2026  
-**Agent:** Cursor Agent (Composer)  
+**Agent:** Cursor Agent (Composer-2.5)  
 **Duration:** ~30 minutes (AST modules, XML bridge, constraint checks, test harness,
 goldens).
 
@@ -239,10 +236,9 @@ make lean-build   # warning-clean
 
 ## Step 4 — Review and repair of Step 3 AST/constraint implementation
 
-**Date:** 4 June 2026  
-**Agent:** Codex (GPT-5)  
-**Duration:** ~20 minutes wall-clock, with the measured fix/retest loop running
-roughly **17:02–17:14 PDT**.
+**Agent:** Codex (GPT-5.5 xhigh)  
+**Duration:** ~20 minutes wall-clock, including a roughly **12 minute**
+fix/retest loop.
 
 ### Request
 
@@ -324,4 +320,67 @@ make parser-all
 
 make test
 # AST Test Summary: Passed: 33, Failed: 0, Skipped: 0
+```
+
+---
+
+## Step 5 — Human-guided correction of parser scope and proof boundary
+
+**Agent:** Codex (GPT-5.5 xhigh)  
+**Duration:** ~40 minutes.
+
+This step records a human-guided review of the Step 3/4 direction. The focus was
+not a new feature, but correcting the project boundary before semantics work
+starts: the parser should remain syntax-only, while semantic/context checks and
+diagnostics should be postponed until the operational semantics are defined.
+
+### Decisions enforced
+
+1. **No type checker or constraint checker in the parser layer.** GNU bc is an
+   untyped calculator language, so the project should not introduce a type
+   checker. Context-sensitive checks such as `return` outside a function,
+   `break`/`continue` outside loops, void-function return values, and similar
+   control-flow validity checks are not parser responsibilities. They are future
+   semantics/context work.
+2. **No `Bc.Diagnostics` layer yet.** Warning/strict-mode diagnostics are useful,
+   but adding a separate diagnostics subsystem now would be premature. The
+   current parser should only reject malformed syntax.
+3. **Use the POSIX/standard syntax subset for reference checks.** Documentation
+   now says to use `bc -s -c` for reference syntax testing, adding `-l` only
+   when libmath is needed.
+4. **Separate syntax tests from future semantics fixtures.** The old
+   `tests/constraints/` role was removed. The syntactically malformed fixture was
+   moved to `tests/parse-invalid/`; context/semantic fixtures were moved to
+   `tests/semantics/` and are not exercised by parser or AST tests.
+5. **Keep the proof/model surface total.** `partial` is disallowed in
+   `Bc/Syntax.lean`, future operational semantics, and functions/predicates that
+   AST or semantic definitions will reference. `partial` remains acceptable in
+   non-verified infrastructure: parser/XML conversion and golden-test
+   pretty-printing.
+
+### Implementation changes
+
+- Removed the current constraint-checking path from `Bc/Parser.lean`.
+- Deleted `Bc/Constraints.lean` and `Bc/Meta.lean`; their checks are deferred
+  until there is a semantics/context layer.
+- Updated parser and AST test scripts so `tests/semantics/` is skipped, while
+  `tests/parse-invalid/` remains available for malformed syntax failures.
+- Updated `README.md`, `AGENTS.md`, and `tests/README.md` to document syntax-only
+  parser scope, `bc -s -c` reference testing, the semantics-fixture directory,
+  and the clarified partial-function rule.
+- Audited current partial-function use. Remaining partials are confined to
+  `Bc/Parser.lean`, `Bc/Xml/*`, and `Bc/Pretty.lean`; none are present in
+  `Bc/Syntax.lean` or the current executable entry point.
+
+### Verification
+
+```bash
+lake build
+# Build completed successfully (20 jobs).
+
+make test
+# AST Test Summary: Passed: 23, Failed: 0, Skipped: 0
+
+make parser-all
+# parse_all_tests: 22 passed, 0 failed (22 total)
 ```

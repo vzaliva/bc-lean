@@ -50,11 +50,7 @@ fi
 expected_path_for() {
   local src="$1"
   local rel="${src#tests/}"
-  if [[ "$rel" == constraints/* ]]; then
-    echo "$EXPECTED_DIR/constraints/${rel#constraints/}"
-  else
-    echo "$EXPECTED_DIR/$rel"
-  fi
+  echo "$EXPECTED_DIR/$rel"
 }
 
 process_file() {
@@ -78,6 +74,9 @@ process_file() {
 shopt -s globstar nullglob
 files=()
 for f in tests/**/*.b tests/**/*.bc; do
+  case "$f" in
+    tests/semantics/*) continue ;;
+  esac
   files+=("$f")
 done
 

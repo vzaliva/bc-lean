@@ -72,11 +72,7 @@ FAILED_TESTS=()
 expected_path_for() {
   local src="$1"
   local rel="${src#tests/}"
-  if [[ "$rel" == constraints/* ]]; then
-    echo "$EXPECTED_DIR/constraints/${rel#constraints/}"
-  else
-    echo "$EXPECTED_DIR/$rel"
-  fi
+  echo "$EXPECTED_DIR/$rel"
 }
 
 discover_tests() {
@@ -84,6 +80,9 @@ discover_tests() {
   local -a found=()
   local f
   for f in tests/**/*.b tests/**/*.bc; do
+    case "$f" in
+      tests/semantics/*) continue ;;
+    esac
     found+=("$f")
   done
   printf '%s\n' "${found[@]}"
@@ -176,10 +175,10 @@ if [[ $# -gt 0 ]]; then
     test_files=("$test_arg")
   elif [[ -f "tests/$test_arg" ]]; then
     test_files=("tests/$test_arg")
-  elif [[ -f "tests/constraints/$test_arg" ]]; then
-    test_files=("tests/constraints/$test_arg")
-  elif [[ -f "tests/constraints/$test_arg.b" ]]; then
-    test_files=("tests/constraints/$test_arg.b")
+  elif [[ -f "tests/parse-invalid/$test_arg" ]]; then
+    test_files=("tests/parse-invalid/$test_arg")
+  elif [[ -f "tests/parse-invalid/$test_arg.b" ]]; then
+    test_files=("tests/parse-invalid/$test_arg.b")
   else
     echo "Error: Test file '$test_arg' not found" >&2
     exit 1
@@ -187,6 +186,15 @@ if [[ $# -gt 0 ]]; then
 else
   mapfile -t test_files < <(discover_tests)
 fi
+
+for src in "${test_files[@]}"; do
+  case "$src" in
+    tests/semantics/*|*/tests/semantics/*)
+      echo "Error: '$src' is a future semantics fixture, not a parser/AST test" >&2
+      exit 1
+      ;;
+  esac
+done
 
 mkdir -p "$TEMP_DIR"
 active_jobs=0

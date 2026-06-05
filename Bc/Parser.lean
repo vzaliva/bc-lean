@@ -3,7 +3,6 @@
 -/
 
 import Bc.Syntax
-import Bc.Constraints
 import Bc.Xml.Basic
 import Bc.Xml.Parser
 
@@ -224,7 +223,7 @@ private def foldChained (parseOp : String → Except String α) (mk : α → Exp
     acc := mk op acc rhs
   return acc
 
-private partial def foldChainedRight (parseOp : String → Except String α)
+private def foldChainedRight (parseOp : String → Except String α)
     (mk : α → Expr → Expr → Expr) (first : Expr) (ops : List String) (rhss : List Expr) :
     Except String Expr := do
   if ops.length ≠ rhss.length then
@@ -236,8 +235,9 @@ private partial def foldChainedRight (parseOp : String → Except String α)
       let right ← foldChainedRight parseOp mk rhs ops' rhss'
       return mk op first right
   | _, _ => throw "operator/operand count mismatch"
+termination_by ops
 
-def runTreeSitterXml (file : String) : IO String := do
+private def runTreeSitterXml (file : String) : IO String := do
   let cwd ← IO.currentDir
   let configPath := cwd / "config.json"
   let output ← IO.Process.output {
@@ -250,13 +250,18 @@ def runTreeSitterXml (file : String) : IO String := do
     throw <| IO.userError s!"tree-sitter failed on {file}:\n{output.stderr}"
   return output.stdout
 
+private def lvalToExpr : LVal → Expr
+  | .var n => .var n
+  | .special v => .special v
+  | .array n idx => .arrayAccess n idx
+
 mutual
 
-  partial def xmlToExpr : Element → Except String Expr
+  private partial def xmlToExpr : Element → Except String Expr
   | x =>
       expectTag "expression" x >>= xmlToExpression
 
-  partial def xmlToExpression (x : Element) : Except String Expr := do
+  private partial def xmlToExpression (x : Element) : Except String Expr := do
     let elems := childElements x
     match elems[0]? with
     | none => throw "empty expression"
@@ -266,7 +271,7 @@ mutual
         | .Element "logical_or_expression" _ _ => xmlToOr e
         | .Element name _ _ => throw s!"unexpected expression form: {name}"
 
-  partial def xmlToAssign (x : Element) : Except String Expr := do
+  private partial def xmlToAssign (x : Element) : Except String Expr := do
     let lhsEl ← singleElement "named_expression" x
     let lhs ← xmlToLVal lhsEl
     let opEl ← singleElement "assign_op" x
@@ -276,21 +281,21 @@ mutual
     let rhs ← xmlToExpression rhsEl
     return .assign lhs op rhs
 
-  partial def xmlToOr (x : Element) : Except String Expr := do
+  private partial def xmlToOr (x : Element) : Except String Expr := do
     let firstEl ← singleElement "logical_and_expression" x
     let first ← xmlToAnd firstEl
     let ops := charTokens x |>.filter (· == "||")
     let rhss ← mapMToList (fieldsNamed x "right") xmlToAnd
     foldChained (fun _ => pure LogicOp.or) (fun _ l r => Expr.logic .or l r) first ops rhss
 
-  partial def xmlToAnd (x : Element) : Except String Expr := do
+  private partial def xmlToAnd (x : Element) : Except String Expr := do
     let firstEl ← singleElement "logical_not_expression" x
     let first ← xmlToNot firstEl
     let ops := charTokens x |>.filter (· == "&&")
     let rhss ← mapMToList (fieldsNamed x "right") xmlToNot
     foldChained (fun _ => pure LogicOp.and) (fun _ l r => Expr.logic .and l r) first ops rhss
 
-  partial def xmlToNot (x : Element) : Except String Expr := do
+  private partial def xmlToNot (x : Element) : Except String Expr := do
     if charTokens x |>.contains "!" then do
       let rel ← singleElement "relational_expression" x
       let inner ← xmlToRel rel
@@ -298,7 +303,7 @@ mutual
     else
       singleElement "relational_expression" x >>= xmlToRel
 
-  partial def xmlToRel (x : Element) : Except String Expr := do
+  private partial def xmlToRel (x : Element) : Except String Expr := do
     let firstEl ← singleElement "additive_expression" x
     let first ← xmlToAdd firstEl
     let opEls := fieldsNamed x "operator"
@@ -311,28 +316,28 @@ mutual
         throw "relational operator/operand mismatch"
       return .rel first (ops.zip rhss)
 
-  partial def xmlToAdd (x : Element) : Except String Expr := do
+  private partial def xmlToAdd (x : Element) : Except String Expr := do
     let firstEl ← singleElement "multiplicative_expression" x
     let first ← xmlToMul firstEl
     let ops := charTokens x |>.filter (fun t => t == "+" || t == "-")
     let rhss ← mapMToList (fieldsNamed x "right") xmlToMul
     foldChained parseBinOp (fun op l r => Expr.bin op l r) first ops rhss
 
-  partial def xmlToMul (x : Element) : Except String Expr := do
+  private partial def xmlToMul (x : Element) : Except String Expr := do
     let firstEl ← singleElement "power_expression" x
     let first ← xmlToPow firstEl
     let ops := charTokens x |>.filter (fun t => t == "*" || t == "/" || t == "%")
     let rhss ← mapMToList (fieldsNamed x "right") xmlToPow
     foldChained parseBinOp (fun op l r => Expr.bin op l r) first ops rhss
 
-  partial def xmlToPow (x : Element) : Except String Expr := do
+  private partial def xmlToPow (x : Element) : Except String Expr := do
     let firstEl ← singleElement "unary_expression" x
     let first ← xmlToUnary firstEl
     let ops := charTokens x |>.filter (· == "^")
     let rhss ← mapMToList (fieldsNamed x "right") xmlToUnary
     foldChainedRight parseBinOp (fun op l r => Expr.bin op l r) first ops rhss
 
-  partial def xmlToUnary (x : Element) : Except String Expr := do
+  private partial def xmlToUnary (x : Element) : Except String Expr := do
     let toks := charTokens x
     if toks.contains "++" then do
       let named ← match fieldAt x "operand" with
@@ -358,7 +363,7 @@ mutual
     else
       singleElement "postfix_expression" x >>= xmlToPostfix
 
-  partial def xmlToPostfix (x : Element) : Except String Expr := do
+  private partial def xmlToPostfix (x : Element) : Except String Expr := do
     let postOps := charTokens x |>.filter (fun t => t == "++" || t == "--")
     if postOps.length > 0 || (fieldsNamed x "operator").size > 0 then do
       let lvEl ← match fieldAt x "operand" with
@@ -373,7 +378,7 @@ mutual
     else
       singleElement "primary_expression" x >>= xmlToPrimary
 
-  partial def xmlToPrimary (x : Element) : Except String Expr := do
+  private partial def xmlToPrimary (x : Element) : Except String Expr := do
     let el ← firstChild x
     match elementName el with
     | "number" => return .num (trimText (textOf (contentOf el)))
@@ -394,7 +399,7 @@ mutual
         return .paren inner
     | name => throw s!"unexpected primary: {name}"
 
-  partial def xmlToCall (x : Element) : Except String Expr := do
+  private partial def xmlToCall (x : Element) : Except String Expr := do
     let nameEl ← singleElement "identifier" x
     let name := trimText (textOf (contentOf nameEl))
     match ← optionalElement "argument_list" x with
@@ -403,7 +408,7 @@ mutual
         let args ← mapMToList (childElements al) xmlToArg
         return .call name args
 
-  partial def xmlToBuiltin (x : Element) : Except String Expr := do
+  private partial def xmlToBuiltin (x : Element) : Except String Expr := do
     let fnName ← builtinNameFrom x
     let fn ← parseBuiltinName fnName
     match ← optionalElement "expression" x with
@@ -412,7 +417,7 @@ mutual
         let arg ← xmlToExpression e
         return .builtin fn (some arg)
 
-  partial def xmlToArg (x : Element) : Except String Arg := do
+  private partial def xmlToArg (x : Element) : Except String Arg := do
     let _ ← expectTag "argument" x
     let el ← firstChild x
     match elementName el with
@@ -422,12 +427,7 @@ mutual
     | "identifier" => return .arrayRef (trimText (textOf (contentOf el)))
     | _ => throw "invalid argument"
 
-  partial def lvalToExpr : LVal → Expr
-  | .var n => .var n
-  | .special v => .special v
-  | .array n idx => .arrayAccess n idx
-
-  partial def xmlToLVal (x : Element) : Except String LVal := do
+  private partial def xmlToLVal (x : Element) : Except String LVal := do
     let _ ← expectTag "named_expression" x
     let el ← firstChild x
     match elementName el with
@@ -442,7 +442,7 @@ mutual
         return .array name idx
     | _ => throw "invalid named_expression"
 
-  partial def xmlToStmt (src : Source) (x : Element) : Except String Stmt := do
+  private partial def xmlToStmt (src : Source) (x : Element) : Except String Stmt := do
     let _ ← expectTag "statement" x
     let inner ← firstChild x
     match elementName inner with
@@ -481,7 +481,7 @@ mutual
         return .block body
     | name => throw s!"unexpected statement: {name}"
 
-  partial def xmlToIf (src : Source) (x : Element) : Except String Stmt := do
+  private partial def xmlToIf (src : Source) (x : Element) : Except String Stmt := do
     let condEl ← singleElement "expression" x
     let cond ← xmlToExpression condEl
     let thenEl ← singleElement "statement" x
@@ -494,14 +494,14 @@ mutual
           pure (some s)
     return .if cond thenBranch elseBranch
 
-  partial def xmlToWhile (src : Source) (x : Element) : Except String Stmt := do
+  private partial def xmlToWhile (src : Source) (x : Element) : Except String Stmt := do
     let condEl ← singleElement "expression" x
     let cond ← xmlToExpression condEl
     let bodyEl ← singleElement "statement" x
     let body ← xmlToStmt src bodyEl
     return .while cond body
 
-  partial def xmlToFor (src : Source) (x : Element) : Except String Stmt := do
+  private partial def xmlToFor (src : Source) (x : Element) : Except String Stmt := do
     let init' ← match fieldAt x "init" with
       | none => pure none
       | some e => xmlToExpression e >>= fun v => pure (some v)
@@ -515,7 +515,7 @@ mutual
     let body ← xmlToStmt src bodyEl
     return .for init' cond' upd' body
 
-  partial def xmlToPrintItem (src : Source) (x : Element) : Except String PrintItem := do
+  private partial def xmlToPrintItem (src : Source) (x : Element) : Except String PrintItem := do
     let _ ← expectTag "print_element" x
     let el ← firstChild x
     match elementName el with
@@ -525,7 +525,7 @@ mutual
         return .expr e
     | _ => throw "invalid print_element"
 
-  partial def xmlToDefineItem (x : Element) : Except String ParamDecl := do
+  private partial def xmlToDefineItem (x : Element) : Except String ParamDecl := do
     let _ ← expectTag "define_item" x
     let toks := charTokens x
     let nameEl ← singleElement "identifier" x
@@ -539,7 +539,7 @@ mutual
     else
       return .scalar name
 
-  partial def xmlToDefineList (x : Element) : Except String (List ParamDecl) := do
+  private partial def xmlToDefineList (x : Element) : Except String (List ParamDecl) := do
     let _ ← expectTag "define_list" x
     let mut acc : List ParamDecl := []
     for e in childElements x do
@@ -549,7 +549,7 @@ mutual
       else pure ()
     return acc
 
-  partial def xmlToBody (src : Source) (x : Element) : Except String (List BodyItem) := do
+  private partial def xmlToBody (src : Source) (x : Element) : Except String (List BodyItem) := do
     let mut items : List BodyItem := []
     let mut pending : List Stmt := []
     match x with
@@ -575,7 +575,7 @@ mutual
       items := items ++ [.stmts pending]
     return items
 
-  partial def xmlToFunDef (src : Source) (x : Element) : Except String FunDef := do
+  private partial def xmlToFunDef (src : Source) (x : Element) : Except String FunDef := do
     let _ ← expectTag "function_definition" x
     let void := (leadingTextBeforeField "name" x).contains "void"
     let name ← match fieldAt x "name" with
@@ -593,13 +593,13 @@ mutual
     let body ← xmlToBody src x
     return { void, name, params, body }
 
-  partial def xmlToStmtSeq (src : Source) (x : Element) : Except String (List Stmt) := do
+  private partial def xmlToStmtSeq (src : Source) (x : Element) : Except String (List Stmt) := do
     let _ ← expectTag "statement_sequence" x
     mapMToList (childElements x) fun e =>
       if elementName e == "statement" then xmlToStmt src e
       else throw "expected statement in sequence"
 
-  partial def xmlToTopItem (src : Source) (x : Element) : Except String TopItem := do
+  private partial def xmlToTopItem (src : Source) (x : Element) : Except String TopItem := do
     match elementName x with
     | "function_definition" =>
         let d ← xmlToFunDef src x
@@ -611,7 +611,7 @@ mutual
 
 end
 
-def xmlToProgram (src : Source) (root : Element) : Except String Program := do
+private def xmlToProgram (src : Source) (root : Element) : Except String Program := do
   let root ← expectTag "source_file" root
   let mut items : List TopItem := []
   for e in childElements root do
@@ -638,9 +638,6 @@ def parseBcFile (path : String) : IO Program := do
       | .ok root =>
           match xmlToProgram (Source.ofString source) root with
           | .error e => throw <| IO.userError s!"AST conversion error in {path}: {e}"
-          | .ok prog =>
-              match Constraints.checkProgram path prog with
-              | .error e => throw <| IO.userError e
-              | .ok prog' => return prog'
+          | .ok prog => return prog
 
 end Bc

@@ -10,7 +10,7 @@
   relation.
 -/
 
-import Bc.SmallStepRel
+import Bc.SmallStepProperties
 
 namespace Bc
 

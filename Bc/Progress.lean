@@ -1,32 +1,33 @@
 /-
-  Progress theorem for the structural small-step semantics.
+  Progress theorem for the declarative structural small-step semantics.
 
   Software Foundations states progress for a small-step relation as: every term
   is either a value or can step to another term. For bc's source-shaped
   residual configurations, terminal outcomes are normal completion, propagated
-  control, and runtime errors. Fuel belongs to the interpreter runner, not to
-  the one-step transition relation.
+  control, and runtime errors. The proof rests on `stepProg_complete`, which
+  shows that the declarative relation covers every executable one-step result.
+  Fuel belongs to the interpreter runner, not to the one-step transition
+  relation.
 -/
 
-import Bc.SmallStep
+import Bc.SmallStepRel
 
 namespace Bc
 
 namespace SmallStep
 
-/-- The relational view of one executable small-step transition. -/
-inductive Transition : Config → Config → Prop where
-  | ofNext {config config' : Config} :
-      step config = .next config' → Transition config config'
+/-- A non-terminal declarative program transition. -/
+def Transition (config config' : Config) : Prop :=
+  StepProg config (.next config')
 
-/-- Terminal one-step outcomes for the fuel-free structural semantics. -/
+/-- Terminal declarative one-step outcomes for the fuel-free structural semantics. -/
 inductive Terminal (config : Config) : Prop where
   | done (st : RuntimeState) :
-      step config = .done st → Terminal config
+      StepProg config (.done st) → Terminal config
   | control (st : RuntimeState) (control : Control) :
-      step config = .control st control → Terminal config
+      StepProg config (.control st control) → Terminal config
   | runtimeError (st : RuntimeState) (message : String) :
-      step config = .runtimeError st message → Terminal config
+      StepProg config (.runtimeError st message) → Terminal config
 
 /-- A generic normal form: a state that cannot take a transition. -/
 def NormalForm {α : Type} (R : α → α → Prop) (x : α) : Prop :=
@@ -39,15 +40,20 @@ def Stuck (config : Config) : Prop :=
 /-- Progress: every configuration either has a terminal result or can take a step. -/
 theorem progress (config : Config) :
     Terminal config ∨ ∃ config', Transition config config' := by
+  have hstep : StepProg config (step config) := stepProg_complete (c := config)
   cases h : step config with
   | next config' =>
-      exact .inr ⟨config', .ofNext h⟩
+      rw [h] at hstep
+      exact .inr ⟨config', hstep⟩
   | done st =>
-      exact .inl (.done st h)
+      rw [h] at hstep
+      exact .inl (.done st hstep)
   | control st control =>
-      exact .inl (.control st control h)
+      rw [h] at hstep
+      exact .inl (.control st control hstep)
   | runtimeError st message =>
-      exact .inl (.runtimeError st message h)
+      rw [h] at hstep
+      exact .inl (.runtimeError st message hstep)
 
 /-- Terminal configurations cannot take a transition. -/
 theorem terminal_is_normal_form {config : Config}
@@ -55,18 +61,13 @@ theorem terminal_is_normal_form {config : Config}
   intro hstep
   cases hstep with
   | intro config' htransition =>
-      cases htransition with
-      | ofNext hnext =>
-          cases h with
-          | done _ hterminal =>
-              rw [hterminal] at hnext
-              cases hnext
-          | control _ _ hterminal =>
-              rw [hterminal] at hnext
-              cases hnext
-          | runtimeError _ _ hterminal =>
-              rw [hterminal] at hnext
-              cases hnext
+      cases h with
+      | done _ hterminal =>
+          cases stepProg_deterministic hterminal htransition
+      | control _ _ hterminal =>
+          cases stepProg_deterministic hterminal htransition
+      | runtimeError _ _ hterminal =>
+          cases stepProg_deterministic hterminal htransition
 
 /-- A normal form for the transition relation must be terminal. -/
 theorem normal_form_is_terminal {config : Config}

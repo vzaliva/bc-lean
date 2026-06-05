@@ -127,11 +127,11 @@ inductive BodyOutcome where
   | runtimeError (state : RuntimeState) (message : String)
   deriving Repr
 
-private def returnValue : Option Num → Num
+def returnValue : Option Num → Num
   | none => Num.zero
   | some n => n
 
-private def popFrame (st : RuntimeState) : RuntimeState :=
+def popFrame (st : RuntimeState) : RuntimeState :=
   { st with frames := st.frames.drop 1 }
 
 mutual
@@ -253,7 +253,7 @@ termination_by stmts => sizeOf stmts
 
 end
 
-private def TopItemTerm.containsQuit (item : TopItemTerm) : Bool :=
+def TopItemTerm.containsQuit (item : TopItemTerm) : Bool :=
   match item with
   | .funDef defn => bodyContainsQuit defn.body
   | TopItemTerm.stmt s => StmtTerm.containsQuit s
@@ -272,7 +272,7 @@ def ProgramTerm.ofProgram : Program → ProgramTerm
   | [] => []
   | item :: rest => TopItemTerm.ofTopItem item ++ ProgramTerm.ofProgram rest
 
-private def enterFunction (st : RuntimeState) (defn : FunDef)
+def enterFunction (st : RuntimeState) (defn : FunDef)
     (argValues : List (Sum Num Name)) : ExprOutcome :=
   let frame : Frame := { constBase := st.ibase }
   let stWithFrame := { st with frames := frame :: st.frames }
@@ -573,7 +573,7 @@ def stepBody (st : RuntimeState) : BodyTerm → BodyOutcome
 
 end
 
-private def next (st : RuntimeState) (program : ProgramTerm) : StepResult :=
+def next (st : RuntimeState) (program : ProgramTerm) : StepResult :=
   .next { state := st, program := program }
 
 def step (config : Config) : StepResult :=

@@ -1,0 +1,5 @@
+define f() {
+  quit
+}
+f()
+1

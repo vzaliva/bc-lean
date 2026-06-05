@@ -44,19 +44,6 @@ disambiguation workflow.)
 **Out of scope (deferred):** Lean `Bc/Parser.lean`, XML→AST, evaluator, golden
 output comparison against reference `bc`.
 
-### Verification
-
-```bash
-make parser-all
-# parse_all_tests: 37 passed, 0 failed (37 total)
-```
-
-Regression set: POSIX `.b` and `.bc` files under `tests/`. Shell
-wrappers `tests/Test/signum` and `tests/Test/timetest` are copied for
-provenance but excluded from parser regression.
-
-**Toolchain:** tree-sitter CLI 0.25.10.
-
 ### Notable grammar work
 
 Ground truth: GNU bc 1.07.1 `bc/bc.y` and `bc/scan.l`.
@@ -141,19 +128,6 @@ project's "no warnings" standard.
 
 `tree-sitter generate` is now **warning-free**.
 
-### Verification
-
-```bash
-make parser-all
-# parse_all_tests: 37 passed, 0 failed (37 total)   (no generate warnings)
-```
-
-Differential check vs `/usr/bin/bc` over POSIX snippets (precedence,
-associativity, assignment chains, incr/decr placement, builtins, arrays) — **all
-accept/reject verdicts now MATCH**, including the four cases above. Spot-checked
-parse trees: `a<b<c` yields one flat `relational_expression` with two `rel_op`s;
-`scale(5)` → `builtin_call`; `scale=3` → assignment with `special_variable` lhs.
-
 ### Known remaining gaps (deferred, not defects in scope)
 
 - The parser is a recogniser only: the layered precedence grammar resolves
@@ -220,14 +194,6 @@ Layout:
 - `tests/ast-expected/` — mirrors `tests/**` and `tests/constraints/`
 - `tests/constraints/` — hand-written `.fail` fixtures
 - `scripts/run_ast_tests.sh`, `scripts/update_ast_tests.sh`
-
-### Verification
-
-```bash
-make parser-all   # 22/22 tree-sitter (unchanged)
-make test         # 27 passed, 0 failed
-make lean-build   # warning-clean
-```
 
 ---
 
@@ -303,19 +269,6 @@ Definition-dependent call diagnostics should stay deferred until the project has
 a function symbol table / operational semantics: GNU bc's behaviour depends on
 function definitions and call resolution, not just local syntax.
 
-### Verification
-
-```bash
-lake build
-# Build completed successfully (24 jobs).
-
-make parser-all
-# parse_all_tests: 22 passed, 0 failed (22 total)
-
-make test
-# AST Test Summary: Passed: 33, Failed: 0, Skipped: 0
-```
-
 ---
 
 ## Step 5 — Human-guided correction of parser scope and proof boundary
@@ -365,19 +318,6 @@ diagnostics should be postponed until the operational semantics are defined.
 - Audited current partial-function use. Remaining partials are confined to
   `Bc/Parser.lean`, `Bc/Xml/*`, and `Bc/Pretty.lean`; none are present in
   `Bc/Syntax.lean` or the current executable entry point.
-
-### Verification
-
-```bash
-lake build
-# Build completed successfully (20 jobs).
-
-make test
-# AST Test Summary: Passed: 38, Failed: 0, Skipped: 0
-
-make parser-all
-# parse_all_tests: 37 passed, 0 failed (37 total)
-```
 
 ---
 
@@ -446,30 +386,6 @@ run with `-l` on both sides.
 1. AST golden tests (`scripts/run_ast_tests.sh`)
 2. Eval reference comparisons (`scripts/run_eval_tests.sh`)
 
-### Verification
-
-```bash
-lake build
-# Build completed successfully (22 jobs).
-
-make eval-test
-# Eval Test Summary:
-# Passed: 37
-# Failed: 0
-# Skipped: 0
-
-make test
-# AST Test Summary:
-# Passed: 38
-# Failed: 0
-# Skipped: 0
-#
-# Eval Test Summary:
-# Passed: 37
-# Failed: 0
-# Skipped: 0
-```
-
 ---
 
 ## Step 7 — Human-guided POSIX consolidation and evaluator cleanup
@@ -496,31 +412,6 @@ definitional interpreter.
    nondeterministic effects from the language model, `Bc.BigStep` was refactored so
    semantic functions return `Result` / `RunResult` directly. `IO` remains only
    in the CLI/parser layer for file access and output.
-
-### Verification
-
-```bash
-lake build
-# Build completed successfully (22 jobs).
-
-shellcheck scripts/run_eval_tests.sh scripts/run_ast_tests.sh \
-  scripts/update_ast_tests.sh scripts/parse_all_tests.sh
-# no findings
-
-make parser-all
-# parse_all_tests: 37 passed, 0 failed (37 total)
-
-make test
-# AST Test Summary:
-# Passed: 38
-# Failed: 0
-# Skipped: 0
-#
-# Eval Test Summary:
-# Passed: 37
-# Failed: 0
-# Skipped: 0
-```
 
 ---
 
@@ -559,36 +450,6 @@ Programming Language Foundations chapter on small-step semantics:
 - Updated `Makefile`: `make eval-test` now runs both `eval-test-big` and
   `eval-test-small`. Small-step eval tests use a larger default fuel budget
   because control steps are finer-grained than big-step evaluation.
-
-### Verification
-
-```bash
-lake build
-# Build completed successfully.
-
-shellcheck scripts/run_eval_tests.sh scripts/run_ast_tests.sh \
-  scripts/update_ast_tests.sh scripts/parse_all_tests.sh
-# no findings
-
-make test
-# AST Test Summary:
-# Passed: 38
-# Failed: 0
-# Skipped: 0
-#
-# Eval Test Summary (big):
-# Passed: 37
-# Failed: 0
-# Skipped: 0
-#
-# Eval Test Summary (small):
-# Passed: 37
-# Failed: 0
-# Skipped: 0
-
-make parser-all
-# parse_all_tests: 37 passed, 0 failed (37 total)
-```
 
 ### Notes and limitations
 
@@ -629,36 +490,6 @@ over a shared runtime layer.
    path, while sharing only runtime helper operations.
 4. **Updated project documentation.** Refreshed `README.md`, `AGENTS.md`, and
    this report to describe `Bc.Runtime` and the intended dependency structure.
-
-### Verification
-
-```bash
-lake build
-# Build completed successfully (24 jobs).
-
-shellcheck scripts/run_eval_tests.sh scripts/run_ast_tests.sh \
-  scripts/update_ast_tests.sh scripts/parse_all_tests.sh
-# no findings
-
-make test
-# AST Test Summary:
-# Passed: 38
-# Failed: 0
-# Skipped: 0
-#
-# Eval Test Summary (big):
-# Passed: 37
-# Failed: 0
-# Skipped: 0
-#
-# Eval Test Summary (small):
-# Passed: 37
-# Failed: 0
-# Skipped: 0
-
-make parser-all
-# parse_all_tests: 37 passed, 0 failed (37 total)
-```
 
 ---
 
@@ -714,31 +545,72 @@ expression tasks and continuation frames. The corrected theorem is now stated
 over the fuel-free small-step relation, matching the Software Foundations
 congruence-rule/evaluation-context approach more closely.
 
-### Verification
+---
 
-```bash
-lake env lean Bc/SmallStep.lean
-# no diagnostics
+## Step 11 — Structural source-AST small-step semantics
 
-lake env lean Bc/Progress.lean
-# no diagnostics
+**Agent:** Codex (GPT-5.5 xhigh)
+**Duration:** ~1 hour.
 
-lake build
-# Build completed successfully (25 jobs).
+### Request
 
-make test
-# AST Test Summary:
-# Passed: 38
-# Failed: 0
-# Skipped: 0
-#
-# Eval Test Summary (big):
-# Passed: 37
-# Failed: 0
-# Skipped: 0
-#
-# Eval Test Summary (small):
-# Passed: 37
-# Failed: 0
-# Skipped: 0
-```
+Human review identified that the Step 10 implementation was a small-step
+abstract-machine semantics using explicit `Task`/continuation frames, not a
+textbook structural small-step semantics over source terms. Replace it with a
+source-AST residual semantics, keep the one-step relation fuel-free, and keep
+the interpreter runner as the only fuel-bounded layer.
+
+### Implementation
+
+- Replaced `Bc.SmallStep`'s continuation/task machine with source-shaped
+  residual terms:
+  - `ProgramTerm`
+  - `TopItemTerm`
+  - `StmtTerm`
+  - `BodyTerm`
+  - `ExprTerm`
+  - `LValTerm`
+  - `ArgTerm`
+- `Config` now stores `RuntimeState` plus a residual `ProgramTerm`, so one step
+  has the textbook shape: current environment plus current residual source term
+  reduces to a new environment plus new residual source term.
+- `ProgramTerm` remains the sequence of top-level residual terms; source
+  `TopItem.stmts` groups are flattened to individual `TopItemTerm.stmt` entries.
+  Groups containing top-level `quit` are collapsed to a single residual stop
+  marker to preserve GNU bc's "skip the whole input item" behaviour.
+- Expression stepping is structural over `ExprTerm`, with values represented as
+  `ExprTerm.value`; lvalue resolution is structural over `LValTerm`, with
+  resolved runtime targets represented as `LValTerm.target`.
+- Statement and body stepping reduce residual statements and bodies directly
+  rather than pushing control-stack tasks.
+- Source `BodyItem.newline` entries are erased during conversion; residual body
+  terms are plain statement sequences.
+- Function calls are represented structurally as `ExprTerm.activeCall`, whose
+  body is a residual `BodyTerm`; return, break, quit, and runtime errors remain
+  explicit terminal/control outcomes.
+- Fuel remains only in `runConfig`, `runProgramWithState`, and `evalBody`.
+- Updated `Bc.Progress` comments to describe the structural residual semantics;
+  the theorem itself remains the fuel-free progress theorem for `step`.
+
+
+---
+
+## Step 12 — Quit terminology cleanup and manual fixture
+
+**Agent:** Codex (GPT-5.5 xhigh)
+**Duration:** ~0.25 hours.
+
+### Request
+
+Human review found the residual small-step representation clumsy because it had
+both source-level `quit` and an artificial source-level `stop` marker. Human
+review also requested a focused unit test for the GNU bc manual example that
+`if (0 == 1) quit` terminates the processor even though the condition is false.
+
+### Implementation
+
+- Removed `TopItemTerm.stop`; top-level source groups containing `quit` now
+  collapse to a residual `StmtTerm.quit`.
+- Renamed the shared control outcome from `Control.stop` to `Control.quit`, so
+  the internal control-flow name matches the source construct.
+- Added `tests/eval/local/quit-if-false-comparison.b` with an AST golden.

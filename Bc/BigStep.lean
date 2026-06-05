@@ -240,7 +240,7 @@ def evalCall (fuel : Nat) (st : RuntimeState) (name : Name) (args : List Arg) :
                   | .ok st .break =>
                       Result.runtimeError { st with frames := st.frames.drop 1 }
                         "Break outside a loop"
-                  | .ok st .stop => .ok { st with frames := st.frames.drop 1 } Num.zero
+                  | .ok st .quit => .ok { st with frames := st.frames.drop 1 } Num.zero
                   | .outOfFuel st => .outOfFuel { st with frames := st.frames.drop 1 }
                   | .runtimeError st msg => .runtimeError { st with frames := st.frames.drop 1 } msg
           | .outOfFuel st => .outOfFuel st
@@ -294,7 +294,7 @@ def evalStmt (fuel : Nat) (st : RuntimeState) (stmt : Stmt) : Result Control :=
           | .ok st n => .ok st (.return (some n))
           | .outOfFuel st => .outOfFuel st
           | .runtimeError st msg => .runtimeError st msg
-      | .quit => .ok { st with stopped := true } .stop
+      | .quit => .ok { st with stopped := true } .quit
       | .block body =>
           evalBody fuel' st body
 
@@ -398,12 +398,12 @@ def evalProgramItems (fuel : Nat) (st : RuntimeState) (items : Program) :
       | [] => .ok st .normal
       | item :: rest =>
           if topItemContainsQuit item then
-            .ok { st with stopped := true } .stop
+            .ok { st with stopped := true } .quit
           else
             match evalTopItem fuel' st item with
             | .ok st .normal =>
-                if st.stopped then .ok st .stop else evalProgramItems fuel' st rest
-            | .ok st .stop => .ok st .stop
+                if st.stopped then .ok st .quit else evalProgramItems fuel' st rest
+            | .ok st .quit => .ok st .quit
             | .ok st .break => .runtimeError st "Break outside a loop"
             | .ok st (.return _) => .runtimeError st "Return outside of a function"
             | .outOfFuel st => .outOfFuel st

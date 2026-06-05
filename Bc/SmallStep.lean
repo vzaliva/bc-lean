@@ -1,10 +1,14 @@
 /-
-  Fuel-free small-step operational semantics for the POSIX bc subset.
+  Fuel-free structural small-step operational semantics for the POSIX bc subset.
 
-  This module defines a pure control-machine stepper. Fuel is used only by the
-  executable runner to bound repeated stepping; the one-step transition itself
-  is fuel-free. Expressions are stepped by the same task stack as statements,
-  with continuations representing the remaining expression context.
+  The one-step relation is over source-shaped residual syntax:
+
+    RuntimeState × ProgramTerm --> RuntimeState × ProgramTerm
+
+  `ProgramTerm`, `StmtTerm`, `ExprTerm`, and related terms mirror the source AST
+  while adding the usual runtime terminals needed by a structural semantics:
+  expression values, resolved lvalue targets, completed statements, and active
+  function-call bodies. Fuel is used only by the executable runner.
 -/
 
 import Bc.Runtime
@@ -15,54 +19,71 @@ namespace SmallStep
 
 mutual
 
-inductive ExprKont where
-  | discard
-  | printIfNeeded (original : Expr)
-  | ifThen (thenBranch : Stmt)
-  | whileCond (cond : Expr) (body : Stmt)
-  | forInit (cond update : Expr) (body : Stmt)
-  | forCond (cond update : Expr) (body : Stmt)
-  | forUpdate (cond update : Expr) (body : Stmt)
-  | returnValue
-  | arrayAccess (name : Name) (k : ExprKont)
-  | lvalArray (name : Name) (k : LValKont)
-  | assignRhs (target : LValueTarget) (op : AssignOp) (k : ExprKont)
-  | relRest (rest : List (RelOp × Expr)) (k : ExprKont)
-  | relRhs (left : Num) (op : RelOp) (tail : List (RelOp × Expr)) (k : ExprKont)
-  | binLeft (op : BinOp) (rhs : Expr) (k : ExprKont)
-  | binRight (op : BinOp) (left : Num) (k : ExprKont)
-  | neg (k : ExprKont)
-  | builtin (fn : Builtin) (k : ExprKont)
-  | callArg (defn : FunDef) (rest : List Arg) (rev : List (Sum Num Name)) (k : ExprKont)
+inductive ExprTerm where
+  | value (value : Num)
+  | num (raw : String)
+  | var (name : Name)
+  | special (var : SpecialVar)
+  | arrayAccess (name : Name) (index : ExprTerm)
+  | assign (lhs : LValTerm) (op : AssignOp) (rhs : ExprTerm)
+  | assignTarget (target : LValueTarget) (op : AssignOp) (rhs : ExprTerm)
+  | rel (first : ExprTerm) (rest : List (RelOp × ExprTerm))
+  | bin (op : BinOp) (lhs rhs : ExprTerm)
+  | neg (arg : ExprTerm)
+  | bump (op : UnOp) (target : LValTerm)
+  | badBump (op : UnOp) (arg : ExprTerm)
+  | call (name : Name) (args : List ArgTerm)
+  | activeCall (body : BodyTerm)
+  | builtin (fn : Builtin) (arg : Option ExprTerm)
+  | paren (body : ExprTerm)
   deriving Repr
 
-inductive LValKont where
-  | assign (op : AssignOp) (rhs : Expr) (k : ExprKont)
-  | bump (op : UnOp) (k : ExprKont)
+inductive LValTerm where
+  | target (target : LValueTarget)
+  | var (name : Name)
+  | special (var : SpecialVar)
+  | array (name : Name) (index : ExprTerm)
+  deriving Repr
+
+inductive ArgTerm where
+  | expr (expr : ExprTerm)
+  | arrayRef (name : Name)
+  deriving Repr
+
+inductive StmtTerm where
+  | done
+  | expr (original : Expr) (expr : ExprTerm)
+  | eval (expr : ExprTerm)
+  | str (value : String)
+  | auto (params : List ParamDecl)
+  | ifThen (cond : ExprTerm) (thenBranch : StmtTerm)
+  | while (condSource : Expr) (cond : ExprTerm) (body : StmtTerm)
+  | forCheck (condSource : Expr) (cond : ExprTerm) (updateSource : Expr) (body : StmtTerm)
+  | forUpdate (condSource updateSource : Expr) (update : ExprTerm) (body : StmtTerm)
+  | loopBody (body : StmtTerm) (after : StmtTerm)
+  | seq (first second : StmtTerm)
+  | break
+  | return (value : Option ExprTerm)
+  | quit
+  | block (body : BodyTerm)
+  deriving Repr
+
+inductive BodyTerm where
+  | stmts (stmts : List StmtTerm)
   deriving Repr
 
 end
 
-inductive Task where
-  | topItems (items : Program)
-  | topItem (item : TopItem)
-  | stmts (stmts : List Stmt)
-  | body (body : List BodyItem)
-  | stmt (stmt : Stmt)
-  | whileLoop (cond : Expr) (body : Stmt)
-  | forCheck (cond update : Expr) (body : Stmt)
-  | forAfterBody (cond update : Expr) (body : Stmt)
-  | evalExpr (expr : Expr) (k : ExprKont)
-  | exprValue (value : Num) (k : ExprKont)
-  | evalLVal (lval : LVal) (k : LValKont)
-  | lvalValue (target : LValueTarget) (k : LValKont)
-  | callArgs (defn : FunDef) (args : List Arg) (rev : List (Sum Num Name)) (k : ExprKont)
-  | functionReturn (k : ExprKont)
+inductive TopItemTerm where
+  | funDef (defn : FunDef)
+  | stmt (stmt : StmtTerm)
   deriving Repr
+
+abbrev ProgramTerm := List TopItemTerm
 
 structure Config where
   state : RuntimeState
-  tasks : List Task
+  program : ProgramTerm
   deriving Repr
 
 inductive StepResult where
@@ -72,48 +93,46 @@ inductive StepResult where
   | runtimeError (state : RuntimeState) (message : String)
   deriving Repr
 
-mutual
+inductive ExprOutcome where
+  | next (state : RuntimeState) (expr : ExprTerm)
+  | value (state : RuntimeState) (value : Num)
+  | control (state : RuntimeState) (control : Control)
+  | runtimeError (state : RuntimeState) (message : String)
+  deriving Repr
 
-private def stmtContainsQuit : Stmt → Bool
-  | .expr _ => false
-  | .str _ => false
-  | .auto _ => false
-  | .if _ thenBranch => stmtContainsQuit thenBranch
-  | .while _ body => stmtContainsQuit body
-  | .for _ _ _ body => stmtContainsQuit body
-  | .break => false
-  | .return _ => false
-  | .quit => true
-  | .block body => bodyContainsQuit body
+inductive LValOutcome where
+  | next (state : RuntimeState) (lval : LValTerm)
+  | target (state : RuntimeState) (target : LValueTarget)
+  | runtimeError (state : RuntimeState) (message : String)
+  deriving Repr
 
-private def stmtsContainQuit : List Stmt → Bool
-  | [] => false
-  | stmt :: rest => stmtContainsQuit stmt || stmtsContainQuit rest
+inductive ArgListOutcome where
+  | next (state : RuntimeState) (args : List ArgTerm)
+  | values (state : RuntimeState) (values : List (Sum Num Name))
+  | control (state : RuntimeState) (control : Control)
+  | runtimeError (state : RuntimeState) (message : String)
+  deriving Repr
 
-private def bodyItemContainsQuit : BodyItem → Bool
-  | .stmts ss => stmtsContainQuit ss
-  | .newline => false
+inductive StmtOutcome where
+  | next (state : RuntimeState) (stmt : StmtTerm)
+  | done (state : RuntimeState)
+  | control (state : RuntimeState) (control : Control)
+  | runtimeError (state : RuntimeState) (message : String)
+  deriving Repr
 
-private def bodyContainsQuit (body : List BodyItem) : Bool :=
-  match body with
-  | [] => false
-  | item :: rest => bodyItemContainsQuit item || bodyContainsQuit rest
-
-end
-
-private def topItemContainsQuit : TopItem → Bool
-  | .funDef defn => bodyContainsQuit defn.body
-  | .stmts ss => stmtsContainQuit ss
-
-private def next (st : RuntimeState) (tasks : List Task) : StepResult :=
-  .next { state := st, tasks := tasks }
-
-private def popFrame (st : RuntimeState) : RuntimeState :=
-  { st with frames := st.frames.drop 1 }
+inductive BodyOutcome where
+  | next (state : RuntimeState) (body : BodyTerm)
+  | done (state : RuntimeState)
+  | control (state : RuntimeState) (control : Control)
+  | runtimeError (state : RuntimeState) (message : String)
+  deriving Repr
 
 private def returnValue : Option Num → Num
   | none => Num.zero
   | some n => n
+
+private def popFrame (st : RuntimeState) : RuntimeState :=
+  { st with frames := st.frames.drop 1 }
 
 private def applyBin? (op : BinOp) (a b : Num) (scale : Nat) : Except String Num :=
   match op with
@@ -134,229 +153,484 @@ private def applyAssign? (op : AssignOp) (old rhs : Num) (scale : Nat) : Except 
   | .modAssign => Num.modulo? old rhs scale
   | .powAssign => Num.pow? old rhs scale
 
-private def enterFunction (st : RuntimeState) (defn : FunDef) (argValues : List (Sum Num Name))
-    (k : ExprKont) (tasks : List Task) : StepResult :=
+mutual
+
+def ExprTerm.ofExpr : Expr → ExprTerm
+  | .num raw => .num raw
+  | .var name => .var name
+  | .special v => .special v
+  | .arrayAccess name index => .arrayAccess name (ExprTerm.ofExpr index)
+  | .assign lhs op rhs => .assign (LValTerm.ofLVal lhs) op (ExprTerm.ofExpr rhs)
+  | .rel first rest => .rel (ExprTerm.ofExpr first) (ExprTerm.ofRelRest rest)
+  | .bin op lhs rhs => .bin op (ExprTerm.ofExpr lhs) (ExprTerm.ofExpr rhs)
+  | .unary .neg arg => .neg (ExprTerm.ofExpr arg)
+  | .unary op arg =>
+      match LValTerm.ofExpr? arg with
+      | some target => .bump op target
+      | none => .badBump op (ExprTerm.ofExpr arg)
+  | .call name args => .call name (ArgTerm.ofArgs args)
+  | .builtin fn none => .builtin fn none
+  | .builtin fn (some arg) => .builtin fn (some (ExprTerm.ofExpr arg))
+  | .paren body => .paren (ExprTerm.ofExpr body)
+termination_by e => sizeOf e
+
+def ExprTerm.ofRelRest : List (RelOp × Expr) → List (RelOp × ExprTerm)
+  | [] => []
+  | (op, e) :: rest => (op, ExprTerm.ofExpr e) :: ExprTerm.ofRelRest rest
+termination_by rest => sizeOf rest
+
+def LValTerm.ofLVal : LVal → LValTerm
+  | .var name => .var name
+  | .special v => .special v
+  | .array name index => .array name (ExprTerm.ofExpr index)
+termination_by lv => sizeOf lv
+
+def LValTerm.ofExpr? : Expr → Option LValTerm
+  | .var name => some (.var name)
+  | .special v => some (.special v)
+  | .arrayAccess name index => some (.array name (ExprTerm.ofExpr index))
+  | .paren body => LValTerm.ofExpr? body
+  | _ => none
+termination_by e => sizeOf e
+
+def ArgTerm.ofArg : Arg → ArgTerm
+  | .expr e => .expr (ExprTerm.ofExpr e)
+  | .arrayRef name => .arrayRef name
+termination_by arg => sizeOf arg
+
+def ArgTerm.ofArgs : List Arg → List ArgTerm
+  | [] => []
+  | arg :: rest => ArgTerm.ofArg arg :: ArgTerm.ofArgs rest
+termination_by args => sizeOf args
+
+def StmtTerm.ofStmt : Stmt → StmtTerm
+  | .expr e => .expr e (ExprTerm.ofExpr e)
+  | .str s => .str s
+  | .auto params => .auto params
+  | .if cond thenBranch => .ifThen (ExprTerm.ofExpr cond) (StmtTerm.ofStmt thenBranch)
+  | .while cond body => .while cond (ExprTerm.ofExpr cond) (StmtTerm.ofStmt body)
+  | .for init cond update body =>
+      .seq (.eval (ExprTerm.ofExpr init))
+        (.forCheck cond (ExprTerm.ofExpr cond) update (StmtTerm.ofStmt body))
+  | .break => .break
+  | .return none => .return none
+  | .return (some e) => .return (some (ExprTerm.ofExpr e))
+  | .quit => .quit
+  | .block body => .block (.stmts (BodyTerm.ofBodyItems body))
+termination_by stmt => sizeOf stmt
+
+def StmtTerm.ofStmts : List Stmt → List StmtTerm
+  | [] => []
+  | stmt :: rest => StmtTerm.ofStmt stmt :: StmtTerm.ofStmts rest
+termination_by stmts => sizeOf stmts
+
+def BodyTerm.ofBodyItems : List BodyItem → List StmtTerm
+  | [] => []
+  | BodyItem.stmts stmts :: rest => StmtTerm.ofStmts stmts ++ BodyTerm.ofBodyItems rest
+  | BodyItem.newline :: rest => BodyTerm.ofBodyItems rest
+termination_by items => sizeOf items
+
+end
+
+def BodyTerm.ofBody (body : List BodyItem) : BodyTerm :=
+  .stmts (BodyTerm.ofBodyItems body)
+
+def TopItemTerm.ofStmts : List Stmt → List TopItemTerm
+  | [] => []
+  | s :: rest => TopItemTerm.stmt (StmtTerm.ofStmt s) :: TopItemTerm.ofStmts rest
+termination_by stmts => sizeOf stmts
+
+mutual
+
+private def StmtTerm.containsQuit : StmtTerm → Bool
+  | .done => false
+  | .expr _ _ => false
+  | .eval _ => false
+  | .str _ => false
+  | .auto _ => false
+  | .ifThen _ thenBranch => StmtTerm.containsQuit thenBranch
+  | .while _ _ body => StmtTerm.containsQuit body
+  | .forCheck _ _ _ body => StmtTerm.containsQuit body
+  | .forUpdate _ _ _ body => StmtTerm.containsQuit body
+  | .loopBody body after => StmtTerm.containsQuit body || StmtTerm.containsQuit after
+  | .seq first second => StmtTerm.containsQuit first || StmtTerm.containsQuit second
+  | .break => false
+  | .return none => false
+  | .return (some _) => false
+  | .quit => true
+  | .block body => BodyTerm.containsQuit body
+termination_by stmt => sizeOf stmt
+
+private def BodyTerm.containsQuit : BodyTerm → Bool
+  | .stmts stmts => StmtTerm.listContainsQuit stmts
+termination_by body => sizeOf body
+
+private def StmtTerm.listContainsQuit : List StmtTerm → Bool
+  | [] => false
+  | stmt :: rest => StmtTerm.containsQuit stmt || StmtTerm.listContainsQuit rest
+termination_by stmts => sizeOf stmts
+
+end
+
+private def TopItemTerm.containsQuit (item : TopItemTerm) : Bool :=
+  match item with
+  | .funDef defn => BodyTerm.containsQuit (BodyTerm.ofBody defn.body)
+  | TopItemTerm.stmt s => StmtTerm.containsQuit s
+
+private def TopItemTerm.ofTermStmts : List StmtTerm → List TopItemTerm
+  | [] => []
+  | s :: rest => TopItemTerm.stmt s :: TopItemTerm.ofTermStmts rest
+
+def TopItemTerm.ofTopItem (item : TopItem) : List TopItemTerm :=
+  match item with
+  | .funDef defn => [.funDef defn]
+  | .stmts ss =>
+      let terms := StmtTerm.ofStmts ss
+      if StmtTerm.listContainsQuit terms then [.stmt .quit] else TopItemTerm.ofTermStmts terms
+
+def ProgramTerm.ofProgram : Program → ProgramTerm
+  | [] => []
+  | item :: rest => TopItemTerm.ofTopItem item ++ ProgramTerm.ofProgram rest
+
+private def enterFunction (st : RuntimeState) (defn : FunDef)
+    (argValues : List (Sum Num Name)) : ExprOutcome :=
   let frame : Frame := { constBase := st.ibase }
   let stWithFrame := { st with frames := frame :: st.frames }
   match bindParams stWithFrame defn.params argValues with
   | .error msg => .runtimeError stWithFrame msg
   | .ok st =>
       let st := bindAutoDecls st (collectAutos defn.body)
-      next st (.body defn.body :: .functionReturn k :: tasks)
+      .next st (.activeCall (BodyTerm.ofBody defn.body))
 
-private def propagateBreak (st : RuntimeState) : List Task → StepResult
-  | [] => .control st .break
-  | .whileLoop _ _ :: rest => next st rest
-  | .forAfterBody _ _ _ :: rest => next st rest
-  | .functionReturn _ :: _ => .runtimeError (popFrame st) "Break outside a loop"
-  | _ :: rest => propagateBreak st rest
+mutual
 
-private def propagateReturn (st : RuntimeState) (value? : Option Num) : List Task → StepResult
-  | [] => .control st (.return value?)
-  | .functionReturn k :: rest => next (popFrame st) (.exprValue (returnValue value?) k :: rest)
-  | _ :: rest => propagateReturn st value? rest
+def stepExpr (st : RuntimeState) : ExprTerm → ExprOutcome
+  | .value n => .value st n
+  | .num raw => .next st (.value (Num.ofInputString raw (currentConstBase st)))
+  | .var name => .next st (.value (lookupScalar st name))
+  | .special v => .next st (.value (specialValue st v))
+  | .arrayAccess name (.value indexValue) =>
+      match indexOfNum? indexValue with
+      | .ok idx =>
+          let (st, id) := ensureArrayId st name
+          .next st (.value (getArrayElem st id idx))
+      | .error msg => .runtimeError st msg
+  | .arrayAccess name index =>
+      match stepExpr st index with
+      | .next st index' => .next st (.arrayAccess name index')
+      | .value st value => .next st (.arrayAccess name (.value value))
+      | .control st control => .control st control
+      | .runtimeError st msg => .runtimeError st msg
+  | .assign (.target target) op rhs =>
+      .next st (.assignTarget target op rhs)
+  | .assign lhs op rhs =>
+      match stepLVal st lhs with
+      | .next st lhs' => .next st (.assign lhs' op rhs)
+      | .target st target => .next st (.assignTarget target op rhs)
+      | .runtimeError st msg => .runtimeError st msg
+  | .assignTarget target op (.value rhsValue) =>
+      let old := readLValueTarget st target
+      match applyAssign? op old rhsValue st.scale with
+      | .ok result => .next (writeLValueTarget st target result) (.value result)
+      | .error msg => .runtimeError st msg
+  | .assignTarget target op rhs =>
+      match stepExpr st rhs with
+      | .next st rhs' => .next st (.assignTarget target op rhs')
+      | .value st value => .next st (.assignTarget target op (.value value))
+      | .control st control => .control st control
+      | .runtimeError st msg => .runtimeError st msg
+  | .rel (.value left) [] =>
+      .next st (.value left)
+  | .rel (.value left) ((op, .value right) :: tail) =>
+      let out := boolNum (applyRel op left right)
+      match tail with
+      | [] => .next st (.value out)
+      | _ => .next st (.rel (.value out) tail)
+  | .rel (.value left) ((op, rhs) :: tail) =>
+      match stepExpr st rhs with
+      | .next st rhs' => .next st (.rel (.value left) ((op, rhs') :: tail))
+      | .value st value => .next st (.rel (.value left) ((op, .value value) :: tail))
+      | .control st control => .control st control
+      | .runtimeError st msg => .runtimeError st msg
+  | .rel first rest =>
+      match stepExpr st first with
+      | .next st first' => .next st (.rel first' rest)
+      | .value st value => .next st (.rel (.value value) rest)
+      | .control st control => .control st control
+      | .runtimeError st msg => .runtimeError st msg
+  | .bin op (.value left) (.value right) =>
+      match applyBin? op left right st.scale with
+      | .ok result => .next st (.value result)
+      | .error msg => .runtimeError st msg
+  | .bin op (.value left) rhs =>
+      match stepExpr st rhs with
+      | .next st rhs' => .next st (.bin op (.value left) rhs')
+      | .value st value => .next st (.bin op (.value left) (.value value))
+      | .control st control => .control st control
+      | .runtimeError st msg => .runtimeError st msg
+  | .bin op lhs rhs =>
+      match stepExpr st lhs with
+      | .next st lhs' => .next st (.bin op lhs' rhs)
+      | .value st value => .next st (.bin op (.value value) rhs)
+      | .control st control => .control st control
+      | .runtimeError st msg => .runtimeError st msg
+  | .neg (.value value) =>
+      .next st (.value (Num.neg value))
+  | .neg arg =>
+      match stepExpr st arg with
+      | .next st arg' => .next st (.neg arg')
+      | .value st value => .next st (.neg (.value value))
+      | .control st control => .control st control
+      | .runtimeError st msg => .runtimeError st msg
+  | .bump op (.target target) =>
+      let (st, old, newValue) :=
+        bumpLValueTarget st target (op == .preIncr || op == .postIncr)
+      let value :=
+        match op with
+        | .preIncr | .preDecr => newValue
+        | .postIncr | .postDecr => old
+        | .neg => newValue
+      .next st (.value value)
+  | .bump op target =>
+      match stepLVal st target with
+      | .next st target' => .next st (.bump op target')
+      | .target st target => .next st (.bump op (.target target))
+      | .runtimeError st msg => .runtimeError st msg
+  | .badBump _ _ =>
+      .runtimeError st "increment/decrement operand is not an lvalue"
+  | .call name args =>
+      match lookupFunction st name with
+      | none => .runtimeError st s!"Function {name} not defined"
+      | some defn =>
+          match stepArgs st args with
+          | .next st args' => .next st (.call name args')
+          | .values st argValues => enterFunction st defn argValues
+          | .control st control => .control st control
+          | .runtimeError st msg => .runtimeError st msg
+  | .activeCall body =>
+      match stepBody st body with
+      | .next st body' => .next st (.activeCall body')
+      | .done st => .next (popFrame st) (.value Num.zero)
+      | .control st (.return value?) =>
+          .next (popFrame st) (.value (returnValue value?))
+      | .control st .break =>
+          .runtimeError (popFrame st) "Break outside a loop"
+      | .control st .normal =>
+          .next (popFrame st) (.value Num.zero)
+      | .control st .quit =>
+          .control (popFrame st) .quit
+      | .runtimeError st msg =>
+          .runtimeError (popFrame st) msg
+  | .builtin _ none =>
+      .runtimeError st "invalid builtin arity"
+  | .builtin .length (some (.value value)) =>
+      .next st (.value (Num.ofInt (Int.ofNat value.length)))
+  | .builtin .scale (some (.value value)) =>
+      .next st (.value (Num.ofInt (Int.ofNat value.scale)))
+  | .builtin .sqrt (some (.value value)) =>
+      match Num.sqrt? value st.scale with
+      | .ok result => .next st (.value result)
+      | .error msg => .runtimeError st msg
+  | .builtin fn (some arg) =>
+      match stepExpr st arg with
+      | .next st arg' => .next st (.builtin fn (some arg'))
+      | .value st value => .next st (.builtin fn (some (.value value)))
+      | .control st control => .control st control
+      | .runtimeError st msg => .runtimeError st msg
+  | .paren (.value value) =>
+      .next st (.value value)
+  | .paren body =>
+      match stepExpr st body with
+      | .next st body' => .next st (.paren body')
+      | .value st value => .next st (.paren (.value value))
+      | .control st control => .control st control
+      | .runtimeError st msg => .runtimeError st msg
 
-private def propagateStop (st : RuntimeState) : List Task → StepResult
-  | [] => .control { st with stopped := true } .stop
-  | .functionReturn _ :: rest => propagateStop (popFrame st) rest
-  | _ :: rest => propagateStop st rest
+def stepLVal (st : RuntimeState) : LValTerm → LValOutcome
+  | .target target => .target st target
+  | .var name => .next st (.target (.scalar name))
+  | .special v => .next st (.target (.special v))
+  | .array name (.value indexValue) =>
+      match indexOfNum? indexValue with
+      | .ok idx =>
+          let (st, id) := ensureArrayId st name
+          .next st (.target (.arrayElem id idx))
+      | .error msg => .runtimeError st msg
+  | .array name index =>
+      match stepExpr st index with
+      | .next st index' => .next st (.array name index')
+      | .value st value => .next st (.array name (.value value))
+      | .control st _ => .runtimeError st "control escaped from lvalue evaluation"
+      | .runtimeError st msg => .runtimeError st msg
+
+def stepArgs (st : RuntimeState) : List ArgTerm → ArgListOutcome
+  | [] => .values st []
+  | .arrayRef name :: rest =>
+      match stepArgs st rest with
+      | .next st rest' => .next st (.arrayRef name :: rest')
+      | .values st values => .values st (.inr name :: values)
+      | .control st control => .control st control
+      | .runtimeError st msg => .runtimeError st msg
+  | .expr (.value value) :: rest =>
+      match stepArgs st rest with
+      | .next st rest' => .next st (.expr (.value value) :: rest')
+      | .values st values => .values st (.inl value :: values)
+      | .control st control => .control st control
+      | .runtimeError st msg => .runtimeError st msg
+  | .expr expr :: rest =>
+      match stepExpr st expr with
+      | .next st expr' => .next st (.expr expr' :: rest)
+      | .value st value => .next st (.expr (.value value) :: rest)
+      | .control st control => .control st control
+      | .runtimeError st msg => .runtimeError st msg
+
+def stepStmt (st : RuntimeState) : StmtTerm → StmtOutcome
+  | .done => .done st
+  | .expr original (.value value) =>
+      if isTopAssignment original then
+        .done st
+      else
+        .done (printNumLine st value)
+  | .expr original expr =>
+      match stepExpr st expr with
+      | .next st expr' => .next st (.expr original expr')
+      | .value st value => .next st (.expr original (.value value))
+      | .control st control => .control st control
+      | .runtimeError st msg => .runtimeError st msg
+  | .eval (.value _) =>
+      .done st
+  | .eval expr =>
+      match stepExpr st expr with
+      | .next st expr' => .next st (.eval expr')
+      | .value st value => .next st (.eval (.value value))
+      | .control st control => .control st control
+      | .runtimeError st msg => .runtimeError st msg
+  | .str s =>
+      .done (appendOutput st (decodeBcString s))
+  | .auto _ =>
+      .done st
+  | .ifThen (.value cond) thenBranch =>
+      if cond.isZero then .done st else .next st thenBranch
+  | .ifThen cond thenBranch =>
+      match stepExpr st cond with
+      | .next st cond' => .next st (.ifThen cond' thenBranch)
+      | .value st value => .next st (.ifThen (.value value) thenBranch)
+      | .control st control => .control st control
+      | .runtimeError st msg => .runtimeError st msg
+  | .while condSource (.value cond) body =>
+      if cond.isZero then
+        .done st
+      else
+        .next st (.loopBody body (.while condSource (ExprTerm.ofExpr condSource) body))
+  | .while condSource cond body =>
+      match stepExpr st cond with
+      | .next st cond' => .next st (.while condSource cond' body)
+      | .value st value => .next st (.while condSource (.value value) body)
+      | .control st control => .control st control
+      | .runtimeError st msg => .runtimeError st msg
+  | .forCheck condSource (.value cond) updateSource body =>
+      if cond.isZero then
+        .done st
+      else
+        .next st (.loopBody body (.forUpdate condSource updateSource
+          (ExprTerm.ofExpr updateSource) body))
+  | .forCheck condSource cond updateSource body =>
+      match stepExpr st cond with
+      | .next st cond' => .next st (.forCheck condSource cond' updateSource body)
+      | .value st value => .next st (.forCheck condSource (.value value) updateSource body)
+      | .control st control => .control st control
+      | .runtimeError st msg => .runtimeError st msg
+  | .forUpdate condSource updateSource (.value _) body =>
+      .next st (.forCheck condSource (ExprTerm.ofExpr condSource) updateSource body)
+  | .forUpdate condSource updateSource update body =>
+      match stepExpr st update with
+      | .next st update' => .next st (.forUpdate condSource updateSource update' body)
+      | .value st value => .next st (.forUpdate condSource updateSource (.value value) body)
+      | .control st control => .control st control
+      | .runtimeError st msg => .runtimeError st msg
+  | .loopBody .done after =>
+      .next st after
+  | .loopBody body after =>
+      match stepStmt st body with
+      | .next st body' => .next st (.loopBody body' after)
+      | .done st => .next st after
+      | .control st .break => .done st
+      | .control st control => .control st control
+      | .runtimeError st msg => .runtimeError st msg
+  | .seq .done second =>
+      .next st second
+  | .seq first second =>
+      match stepStmt st first with
+      | .next st first' => .next st (.seq first' second)
+      | .done st => .next st second
+      | .control st control => .control st control
+      | .runtimeError st msg => .runtimeError st msg
+  | .break =>
+      .control st .break
+  | .return none =>
+      .control st (.return none)
+  | .return (some (.value value)) =>
+      .control st (.return (some value))
+  | .return (some expr) =>
+      match stepExpr st expr with
+      | .next st expr' => .next st (.return (some expr'))
+      | .value st value => .next st (.return (some (.value value)))
+      | .control st control => .control st control
+      | .runtimeError st msg => .runtimeError st msg
+  | .quit =>
+      .control { st with stopped := true } .quit
+  | .block body =>
+      match stepBody st body with
+      | .next st body' => .next st (.block body')
+      | .done st => .done st
+      | .control st control => .control st control
+      | .runtimeError st msg => .runtimeError st msg
+
+def stepBody (st : RuntimeState) : BodyTerm → BodyOutcome
+  | .stmts [] => .done st
+  | .stmts (stmt :: rest) =>
+      match stepStmt st stmt with
+      | .next st stmt' => .next st (.stmts (stmt' :: rest))
+      | .done st => .next st (.stmts rest)
+      | .control st control => .control st control
+      | .runtimeError st msg => .runtimeError st msg
+
+end
+
+private def next (st : RuntimeState) (program : ProgramTerm) : StepResult :=
+  .next { state := st, program := program }
 
 def step (config : Config) : StepResult :=
-  match config.tasks with
+  match config.program with
   | [] => .done config.state
-  | task :: tasks =>
-      let st := config.state
-      match task with
-      | .topItems [] => next st tasks
-      | .topItems (item :: rest) =>
-          if topItemContainsQuit item then
-            .done { st with stopped := true }
-          else
-            next st (.topItem item :: .topItems rest :: tasks)
-      | .topItem (.funDef defn) =>
-          next (setFunction st defn) tasks
-      | .topItem (.stmts ss) =>
-          next st (.stmts ss :: tasks)
-      | .stmts [] => next st tasks
-      | .stmts (stmt :: rest) =>
-          next st (.stmt stmt :: .stmts rest :: tasks)
-      | .body [] => next st tasks
-      | .body (.newline :: rest) =>
-          next st (.body rest :: tasks)
-      | .body (.stmts ss :: rest) =>
-          next st (.stmts ss :: .body rest :: tasks)
-      | .stmt (.expr e) =>
-          next st (.evalExpr e (.printIfNeeded e) :: tasks)
-      | .stmt (.str s) =>
-          next (appendOutput st (decodeBcString s)) tasks
-      | .stmt (.auto _) =>
-          next st tasks
-      | .stmt (.if cond thenBranch) =>
-          next st (.evalExpr cond (.ifThen thenBranch) :: tasks)
-      | .stmt (.while cond body) =>
-          next st (.evalExpr cond (.whileCond cond body) :: tasks)
-      | .stmt (.for init cond update body) =>
-          next st (.evalExpr init (.forInit cond update body) :: tasks)
-      | .stmt .break =>
-          propagateBreak st tasks
-      | .stmt (.return none) =>
-          propagateReturn st none tasks
-      | .stmt (.return (some valueExpr)) =>
-          next st (.evalExpr valueExpr .returnValue :: tasks)
-      | .stmt .quit =>
-          propagateStop st tasks
-      | .stmt (.block body) =>
-          next st (.body body :: tasks)
-      | .whileLoop cond body =>
-          next st (.evalExpr cond (.whileCond cond body) :: tasks)
-      | .forCheck cond update body =>
-          next st (.evalExpr cond (.forCond cond update body) :: tasks)
-      | .forAfterBody cond update body =>
-          next st (.evalExpr update (.forUpdate cond update body) :: tasks)
-      | .evalExpr (.num raw) k =>
-          next st (.exprValue (Num.ofInputString raw (currentConstBase st)) k :: tasks)
-      | .evalExpr (.var name) k =>
-          next st (.exprValue (lookupScalar st name) k :: tasks)
-      | .evalExpr (.special v) k =>
-          next st (.exprValue (specialValue st v) k :: tasks)
-      | .evalExpr (.arrayAccess name idxExpr) k =>
-          next st (.evalExpr idxExpr (.arrayAccess name k) :: tasks)
-      | .evalExpr (.assign lhs op rhs) k =>
-          next st (.evalLVal lhs (.assign op rhs k) :: tasks)
-      | .evalExpr (.rel first rest) k =>
-          next st (.evalExpr first (.relRest rest k) :: tasks)
-      | .evalExpr (.bin op lhs rhs) k =>
-          next st (.evalExpr lhs (.binLeft op rhs k) :: tasks)
-      | .evalExpr (.unary .neg arg) k =>
-          next st (.evalExpr arg (.neg k) :: tasks)
-      | .evalExpr (.unary op arg) k =>
-          match lvalOfExpr? arg with
-          | none => .runtimeError st "increment/decrement operand is not an lvalue"
-          | some lv => next st (.evalLVal lv (.bump op k) :: tasks)
-      | .evalExpr (.call name args) k =>
-          match lookupFunction st name with
-          | none => .runtimeError st s!"Function {name} not defined"
-          | some defn => next st (.callArgs defn args [] k :: tasks)
-      | .evalExpr (.builtin _ none) _ =>
-          .runtimeError st "invalid builtin arity"
-      | .evalExpr (.builtin fn (some arg)) k =>
-          next st (.evalExpr arg (.builtin fn k) :: tasks)
-      | .evalExpr (.paren body) k =>
-          next st (.evalExpr body k :: tasks)
-      | .exprValue _ .discard =>
-          next st tasks
-      | .exprValue value (.printIfNeeded original) =>
-          if isTopAssignment original then
-            next st tasks
-          else
-            next (printNumLine st value) tasks
-      | .exprValue value (.ifThen thenBranch) =>
-          if value.isZero then
-            next st tasks
-          else
-            next st (.stmt thenBranch :: tasks)
-      | .exprValue value (.whileCond cond body) =>
-          if value.isZero then
-            next st tasks
-          else
-            next st (.stmt body :: .whileLoop cond body :: tasks)
-      | .exprValue _ (.forInit cond update body) =>
-          next st (.forCheck cond update body :: tasks)
-      | .exprValue value (.forCond cond update body) =>
-          if value.isZero then
-            next st tasks
-          else
-            next st (.stmt body :: .forAfterBody cond update body :: tasks)
-      | .exprValue _ (.forUpdate cond update body) =>
-          next st (.forCheck cond update body :: tasks)
-      | .exprValue value .returnValue =>
-          propagateReturn st (some value) tasks
-      | .exprValue value (.arrayAccess name k) =>
-          match indexOfNum? value with
-          | .ok idx =>
-              let (st, id) := ensureArrayId st name
-              next st (.exprValue (getArrayElem st id idx) k :: tasks)
-          | .error msg => .runtimeError st msg
-      | .exprValue value (.lvalArray name k) =>
-          match indexOfNum? value with
-          | .ok idx =>
-              let (st, id) := ensureArrayId st name
-              next st (.lvalValue (.arrayElem id idx) k :: tasks)
-          | .error msg => .runtimeError st msg
-      | .exprValue value (.assignRhs target op k) =>
-          let old := readLValueTarget st target
-          match applyAssign? op old value st.scale with
-          | .ok result =>
-              next (writeLValueTarget st target result) (.exprValue result k :: tasks)
-          | .error msg => .runtimeError st msg
-      | .exprValue value (.relRest [] k) =>
-          next st (.exprValue value k :: tasks)
-      | .exprValue value (.relRest ((op, rhs) :: tail) k) =>
-          next st (.evalExpr rhs (.relRhs value op tail k) :: tasks)
-      | .exprValue right (.relRhs left op [] k) =>
-          next st (.exprValue (boolNum (applyRel op left right)) k :: tasks)
-      | .exprValue right (.relRhs left op (nextRel :: tail) k) =>
-          let out := boolNum (applyRel op left right)
-          next st (.exprValue out (.relRest (nextRel :: tail) k) :: tasks)
-      | .exprValue value (.binLeft op rhs k) =>
-          next st (.evalExpr rhs (.binRight op value k) :: tasks)
-      | .exprValue right (.binRight op left k) =>
-          match applyBin? op left right st.scale with
-          | .ok result => next st (.exprValue result k :: tasks)
-          | .error msg => .runtimeError st msg
-      | .exprValue value (.neg k) =>
-          next st (.exprValue (Num.neg value) k :: tasks)
-      | .exprValue value (.builtin .length k) =>
-          next st (.exprValue (Num.ofInt (Int.ofNat value.length)) k :: tasks)
-      | .exprValue value (.builtin .scale k) =>
-          next st (.exprValue (Num.ofInt (Int.ofNat value.scale)) k :: tasks)
-      | .exprValue value (.builtin .sqrt k) =>
-          match Num.sqrt? value st.scale with
-          | .ok result => next st (.exprValue result k :: tasks)
-          | .error msg => .runtimeError st msg
-      | .exprValue value (.callArg defn rest rev k) =>
-          next st (.callArgs defn rest (.inl value :: rev) k :: tasks)
-      | .evalLVal (.var name) k =>
-          next st (.lvalValue (.scalar name) k :: tasks)
-      | .evalLVal (.special v) k =>
-          next st (.lvalValue (.special v) k :: tasks)
-      | .evalLVal (.array name idxExpr) k =>
-          next st (.evalExpr idxExpr (.lvalArray name k) :: tasks)
-      | .lvalValue target (.assign op rhs k) =>
-          next st (.evalExpr rhs (.assignRhs target op k) :: tasks)
-      | .lvalValue target (.bump op k) =>
-          let (st, old, newValue) :=
-            bumpLValueTarget st target (op == .preIncr || op == .postIncr)
-          match op with
-          | .preIncr | .preDecr =>
-              next st (.exprValue newValue k :: tasks)
-          | .postIncr | .postDecr =>
-              next st (.exprValue old k :: tasks)
-          | .neg =>
-              next st (.exprValue newValue k :: tasks)
-      | .callArgs defn [] rev k =>
-          enterFunction st defn rev.reverse k tasks
-      | .callArgs defn (.arrayRef name :: rest) rev k =>
-          next st (.callArgs defn rest (.inr name :: rev) k :: tasks)
-      | .callArgs defn (.expr e :: rest) rev k =>
-          next st (.evalExpr e (.callArg defn rest rev k) :: tasks)
-      | .functionReturn k =>
-          next (popFrame st) (.exprValue Num.zero k :: tasks)
+  | item :: rest =>
+      if TopItemTerm.containsQuit item then
+        .done { config.state with stopped := true }
+      else
+        match item with
+        | .funDef defn =>
+            next (setFunction config.state defn) rest
+        | .stmt stmt =>
+            match stepStmt config.state stmt with
+            | .next st stmt' => next st (.stmt stmt' :: rest)
+            | .done st => next st rest
+            | .control st control => .control st control
+            | .runtimeError st msg => .runtimeError st msg
 
-private def runBodyConfig : Nat → Config → Result Control
-  | 0, config => .outOfFuel config.state
-  | fuel + 1, config =>
-      match step config with
-      | .next config => runBodyConfig fuel config
+private def runBodyConfig : Nat → RuntimeState → BodyTerm → Result Control
+  | 0, st, _ => .outOfFuel st
+  | fuel + 1, st, body =>
+      match stepBody st body with
+      | .next st body' => runBodyConfig fuel st body'
       | .done st => .ok st .normal
       | .control st control => .ok st control
       | .runtimeError st msg => .runtimeError st msg
 
 def evalBody (fuel : Nat) (st : RuntimeState) (body : List BodyItem) : Result Control :=
-  runBodyConfig fuel { state := st, tasks := [.body body] }
+  runBodyConfig fuel st (BodyTerm.ofBody body)
 
 def initialConfig (st : RuntimeState) (program : Program) : Config :=
-  { state := st, tasks := [.topItems program] }
+  { state := st, program := ProgramTerm.ofProgram program }
 
 def runConfig : Nat → Config → RunResult
   | 0, config => .outOfFuel config.state
@@ -365,7 +639,7 @@ def runConfig : Nat → Config → RunResult
       | .next config => runConfig fuel config
       | .done st => .success st
       | .control st .normal => .success st
-      | .control st .stop => .success st
+      | .control st .quit => .success st
       | .control st .break => .runtimeError st "Break outside a loop"
       | .control st (.return _) => .runtimeError st "Return outside of a function"
       | .runtimeError st msg => .runtimeError st msg

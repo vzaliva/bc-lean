@@ -331,7 +331,7 @@ inductive Control where
   | normal
   | break
   | return (value : Option Num)
-  | stop
+  | quit
   deriving Repr, BEq
 
 def initialState : RuntimeState := {}

@@ -235,15 +235,34 @@ termination_by ops
 private def runTreeSitterXml (file : String) : IO String := do
   let cwd ← IO.currentDir
   let configPath := cwd / "config.json"
-  let output ← IO.Process.output {
-    cmd := "tree-sitter"
-    args := #["parse", "-x", file, "--config-path", toString configPath]
-    stderr := .piped
-    stdout := .piped
-  }
-  if output.exitCode ≠ 0 then
-    throw <| IO.userError s!"tree-sitter failed on {file}:\n{output.stderr}"
-  return output.stdout
+  let rec runAttempt : Nat → IO String
+    | 0 => do
+        let output ← IO.Process.output {
+          cmd := "tree-sitter"
+          args := #["parse", "-x", file, "--config-path", toString configPath]
+          stderr := .piped
+          stdout := .piped
+        }
+        if output.exitCode ≠ 0 then
+          throw <| IO.userError s!"tree-sitter failed on {file}:\n{output.stderr}"
+        return output.stdout
+    | retries + 1 => do
+        let output ← IO.Process.output {
+          cmd := "tree-sitter"
+          args := #["parse", "-x", file, "--config-path", toString configPath]
+          stderr := .piped
+          stdout := .piped
+        }
+        if output.exitCode = 0 then
+          return output.stdout
+        else if output.stderr.contains "Failed to load langauge" ||
+            output.stderr.contains "Failed to load language" ||
+            output.stderr.contains "No language found" then
+          IO.sleep 25
+          runAttempt retries
+        else
+          throw <| IO.userError s!"tree-sitter failed on {file}:\n{output.stderr}"
+  runAttempt 3
 
 private def lvalToExpr : LVal → Expr
   | .var n => .var n

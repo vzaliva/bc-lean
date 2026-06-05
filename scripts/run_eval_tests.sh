@@ -11,9 +11,7 @@ if ! command -v bc >/dev/null 2>&1; then
   exit 0
 fi
 
-TEMP_DIR="testResults-eval"
-LOCK_DIR="$TEMP_DIR/.print_lock"
-PROGRESS_FILE="$TEMP_DIR/.progress"
+TEMP_ROOT="${BC_LEAN_TEMP_ROOT:-testResults-eval}"
 FUEL="${BC_LEAN_FUEL:-200000}"
 SEMANTICS="${BC_LEAN_SEMANTICS:-big}"
 BC_LEAN_EXE="${BC_LEAN_EXE:-.lake/build/bin/bc-lean}"
@@ -81,13 +79,19 @@ case "$SEMANTICS" in
     ;;
 esac
 
+TEMP_DIR="${BC_LEAN_TEMP_DIR:-$TEMP_ROOT.$SEMANTICS.$$}"
+LOCK_DIR="$TEMP_DIR/.print_lock"
+PROGRESS_FILE="$TEMP_DIR/.progress"
+
 cleanup() {
   local pids=()
   mapfile -t pids < <(jobs -pr)
   if [[ ${#pids[@]} -gt 0 ]]; then
     kill "${pids[@]}" 2>/dev/null || true
   fi
-  rm -rf "$TEMP_DIR"
+  if [[ -n "${TEMP_DIR:-}" ]]; then
+    rm -rf "$TEMP_DIR"
+  fi
 }
 
 trap cleanup EXIT INT TERM
@@ -141,6 +145,8 @@ run_single_test() {
   local src="$1"
   local result_base lean_out ref_out lean_err ref_err report status
   local lean_code ref_code math_args=()
+
+  mkdir -p "$TEMP_DIR"
 
   result_base="${src#tests/}"
   result_base="${result_base//\//__}"

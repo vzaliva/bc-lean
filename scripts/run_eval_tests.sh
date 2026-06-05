@@ -30,7 +30,7 @@ fi
 print_usage() {
   echo "Usage: $0 [-j|--jobs N] [test ...]"
   echo "  -j, --jobs N   Number of parallel executions (default: CPU count)"
-  echo "  test ...       Optional test paths; defaults to tests/Test and tests/Examples"
+  echo "  test ...       Optional test paths; defaults to checked-in eval corpora"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -87,6 +87,11 @@ ensure_runtime_artifacts() {
 }
 
 needs_mathlib() {
+  local stem="${1%.*}"
+  if [[ -f "$1.mathlib" || -f "$stem.mathlib" ]]; then
+    return 0
+  fi
+
   case "$1" in
     tests/Test/atan.b|tests/Test/checklib.b|tests/Test/exp.b|tests/Test/jn.b|\
     tests/Test/ln.b|tests/Test/sine.b|tests/Examples/pi.b)
@@ -98,11 +103,31 @@ needs_mathlib() {
   esac
 }
 
-should_skip() {
+input_file_for() {
   local src="$1"
-  if rg -q 'read[[:space:]]*\(|random[[:space:]]*\(' "$src"; then
+  local stem="${src%.*}"
+  if [[ -f "$src.stdin" ]]; then
+    printf '%s\n' "$src.stdin"
     return 0
   fi
+  if [[ -f "$stem.stdin" ]]; then
+    printf '%s\n' "$stem.stdin"
+    return 0
+  fi
+  return 1
+}
+
+should_skip() {
+  local src="$1"
+  if rg -q 'random[[:space:]]*\(' "$src"; then
+    return 0
+  fi
+  if rg -q 'read[[:space:]]*\(' "$src"; then
+    if ! input_file_for "$src" >/dev/null; then
+      return 0
+    fi
+  fi
+
   return 1
 }
 
@@ -124,7 +149,7 @@ print_report() {
 
 run_single_test() {
   local src="$1"
-  local result_base lean_out ref_out lean_err ref_err report status
+  local result_base lean_out ref_out lean_err ref_err report status stdin_file
   local lean_code ref_code math_args=()
 
   result_base="${src#tests/}"
@@ -147,13 +172,27 @@ run_single_test() {
     math_args=(-l)
   fi
 
-  "$BC_LEAN_EXE" --fuel "$FUEL" "${math_args[@]}" "$src" >"$lean_out" 2>"$lean_err"
+  if stdin_file=$(input_file_for "$src"); then
+    "$BC_LEAN_EXE" --fuel "$FUEL" "${math_args[@]}" "$src" \
+      <"$stdin_file" >"$lean_out" 2>"$lean_err"
+  else
+    "$BC_LEAN_EXE" --fuel "$FUEL" "${math_args[@]}" "$src" \
+      </dev/null >"$lean_out" 2>"$lean_err"
+  fi
   lean_code=$?
 
-  if needs_mathlib "$src"; then
-    bc -l "$src" >"$ref_out" 2>"$ref_err"
+  if stdin_file=$(input_file_for "$src"); then
+    if needs_mathlib "$src"; then
+      bc -l "$src" <"$stdin_file" >"$ref_out" 2>"$ref_err"
+    else
+      bc "$src" <"$stdin_file" >"$ref_out" 2>"$ref_err"
+    fi
   else
-    bc "$src" >"$ref_out" 2>"$ref_err"
+    if needs_mathlib "$src"; then
+      bc -l "$src" </dev/null >"$ref_out" 2>"$ref_err"
+    else
+      bc "$src" </dev/null >"$ref_out" 2>"$ref_err"
+    fi
   fi
   ref_code=$?
 
@@ -185,7 +224,19 @@ run_single_test() {
 }
 
 discover_tests() {
-  find tests/Test tests/Examples -type f \( -name '*.b' -o -name '*.bc' \) | sort
+  local roots=(tests/Test tests/Examples tests/eval tests/external)
+  local existing=()
+  for root in "${roots[@]}"; do
+    if [[ -d "$root" ]]; then
+      existing+=("$root")
+    fi
+  done
+
+  if [[ ${#existing[@]} -eq 0 ]]; then
+    return 0
+  fi
+
+  find "${existing[@]}" -type f \( -name '*.b' -o -name '*.bc' \) | sort
 }
 
 mkdir -p "$TEMP_DIR"

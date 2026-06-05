@@ -1,0 +1,4 @@
+define f() {
+  halt
+}
+1

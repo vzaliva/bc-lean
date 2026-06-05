@@ -3,7 +3,7 @@
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR/.."
+cd "$SCRIPT_DIR/.." || exit 1
 
 EXPECTED_DIR="tests/ast-expected"
 TEMP_DIR="testResults"
@@ -54,10 +54,10 @@ if ! [[ "$JOBS" =~ ^[0-9]+$ ]] || [[ "$JOBS" -lt 1 ]]; then
 fi
 
 cleanup() {
-  local pids
-  pids=$(jobs -pr)
-  if [[ -n "$pids" ]]; then
-    kill $pids 2>/dev/null || true
+  local pids=()
+  mapfile -t pids < <(jobs -pr)
+  if [[ ${#pids[@]} -gt 0 ]]; then
+    kill "${pids[@]}" 2>/dev/null || true
   fi
   rm -rf "$TEMP_DIR"
 }

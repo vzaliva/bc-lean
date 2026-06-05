@@ -1117,6 +1117,48 @@ def evalTopItem (fuel : Nat) (st : RuntimeState) : TopItem → IO (Result Contro
   | .funDef defn => pure (.ok (setFunction st defn) .normal)
   | .stmts ss => evalStmts fuel st ss
 
+mutual
+
+private def stmtContainsQuit : Stmt → Bool
+  | .expr _ => false
+  | .str _ => false
+  | .auto _ => false
+  | .if _ thenBranch elseBranch =>
+      stmtContainsQuit thenBranch ||
+        match elseBranch with
+        | none => false
+        | some branch => stmtContainsQuit branch
+  | .while _ body => stmtContainsQuit body
+  | .for _ _ _ body => stmtContainsQuit body
+  | .break => false
+  | .continue => false
+  | .return _ => false
+  | .quit => true
+  | .halt => false
+  | .print _ => false
+  | .warranty => false
+  | .limits => false
+  | .block body => bodyContainsQuit body
+
+private def stmtsContainQuit : List Stmt → Bool
+  | [] => false
+  | stmt :: rest => stmtContainsQuit stmt || stmtsContainQuit rest
+
+private def bodyItemContainsQuit : BodyItem → Bool
+  | .stmts ss => stmtsContainQuit ss
+  | .newline => false
+
+private def bodyContainsQuit (body : List BodyItem) : Bool :=
+  match body with
+  | [] => false
+  | item :: rest => bodyItemContainsQuit item || bodyContainsQuit rest
+
+end
+
+private def topItemContainsQuit : TopItem → Bool
+  | .funDef defn => bodyContainsQuit defn.body
+  | .stmts ss => stmtsContainQuit ss
+
 def evalProgramItems (fuel : Nat) (st : RuntimeState) (items : Program) :
     IO (Result Control) := do
   match fuel with
@@ -1125,6 +1167,8 @@ def evalProgramItems (fuel : Nat) (st : RuntimeState) (items : Program) :
       match items with
       | [] => return .ok st .normal
       | item :: rest =>
+          if topItemContainsQuit item then
+            return .ok { st with halted := true } .stop
           match ← evalTopItem fuel' st item with
           | .ok st .normal =>
               if st.halted then return .ok st .stop else evalProgramItems fuel' st rest

@@ -384,3 +384,113 @@ make test
 make parser-all
 # parse_all_tests: 22 passed, 0 failed (22 total)
 ```
+
+---
+
+## Step 6 — Big-step operational semantics and definitional interpreter
+
+**Agent:** Codex (GPT-5.5 xhigh)  
+**Duration:** ~2 hours wall-clock, including reference-source inspection,
+poison-lang comparison, implementation, and regression testing.
+
+### Request
+
+Implement the next project step: a big-step operational semantics for GNU bc
+that can also run as the definitional interpreter. Use poison-lang as
+inspiration, especially the choice to keep semantics in `IO` because bc has
+effectful builtins such as `read()` and `random()`. Do not use `partial`
+functions in the semantics. Faithfully implement bc semantics for the defined
+syntax and add tests that run existing fixtures through the interpreter and
+compare outputs against the GNU `bc` command.
+
+### Reference material
+
+- GNU bc 1.07.1 source under `bc-1.07.1/`, especially `bc/execute.c`,
+  `bc/storage.c`, `lib/number.c`, `bc/bc.y`, and `bc/libmath.b`.
+- Current poison-lang checkout at commit
+  `f052d113586f742417c89438a346626720ce66c2`; `LeanPoison/BigStep.lean`
+  still contains `rand`/`frand` in an `IO`-based big-step evaluator.
+- Live `bc --version`: GNU bc 1.07.1.
+
+### Deliverables
+
+| Area | Location |
+|------|----------|
+| Big-step evaluator | `Bc/Eval.lean` |
+| CLI runner | `Main.lean` (`bc-lean [--fuel N] [-l|--mathlib] file...`) |
+| Eval regression harness | `scripts/run_eval_tests.sh` |
+| Make target | `make eval-test`; `make test` now runs AST + eval tests |
+
+### Semantics implemented
+
+- Total, fuel-bounded mutually recursive semantic functions; no `partial`,
+  `sorry`, or axioms in `Bc/Eval.lean`.
+- Runtime state for globals, stacked function frames, autos, arrays, function
+  definitions, `ibase`, `obase`, `scale`, `last`, `history`, input, output, and
+  halt state.
+- Executable decimal number model with bc-style scale rules for addition,
+  subtraction, multiplication, division, modulo, exponentiation, square root,
+  input-base parsing, output-base rendering, and 70-column output wrapping.
+- Statements and control flow: expression printing rules, strings, `print`,
+  blocks, `if`, `while`, `for`, `break`, `continue`, `return`, `quit`, `halt`,
+  `limits`, and `warranty`.
+- Functions: dynamic definitions, parameters, autos, recursion, call-by-value
+  scalar/array parameters, and GNU extension call-by-variable arrays (`*a[]` /
+  `&a[]`).
+- Builtins: `length`, `scale`, `sqrt`, `read`, and `random`, with the evaluator
+  running in `IO` for effectful operations.
+- `-l` / `--mathlib` CLI mode preloads `bc-1.07.1/bc/libmath.b`, matching the
+  reference tests that depend on `s`, `c`, `a`, `l`, `e`, and `j`.
+
+### Tests
+
+`scripts/run_eval_tests.sh` discovers checked-in GNU bc corpus files, builds the
+interpreter once when needed, runs the compiled `bc-lean` executable, runs the
+same file through GNU `bc`, and diffs stdout. The harness runs tests in
+parallel by default, supports `-j` / `--jobs` to cap concurrency, and reports
+progress as each worker finishes (`[done/total]`). Math-library fixtures are
+run with `-l` on both sides. Interactive or nondeterministic programs using
+`read()`/`random()` are skipped by default.
+
+`make test` now runs both:
+
+1. AST golden tests (`scripts/run_ast_tests.sh`)
+2. Eval reference comparisons (`scripts/run_eval_tests.sh`)
+
+### Verification
+
+```bash
+lake build
+# Build completed successfully (22 jobs).
+
+make eval-test
+# Eval Test Summary:
+# Passed: 21
+# Failed: 0
+# Skipped: 1
+
+make test
+# AST Test Summary:
+# Passed: 23
+# Failed: 0
+# Skipped: 0
+#
+# Eval Test Summary:
+# Passed: 21
+# Failed: 0
+# Skipped: 1
+```
+
+The skipped eval fixture is `tests/Examples/ckbook.b`, which is intentionally
+interactive and calls `read()`. The interpreter implements `read()` through
+standard input, but the automated comparison harness avoids blocking on
+interactive examples.
+
+### Notes and limitations
+
+The evaluator is intended as an executable semantics, not a diagnostics layer.
+It reports runtime errors for invalid control-flow/runtime cases but does not
+attempt to reproduce every `bc -s` / `bc -w` compile-time warning. The decimal
+number implementation was validated against the checked-in reference corpus,
+including heavy arithmetic and libmath tests, but it remains a Lean model rather
+than a direct binding to GNU bc's `lib/number.c`.

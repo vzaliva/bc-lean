@@ -4,8 +4,10 @@ An experiment in **AI-assisted semantics extraction**: deriving complete,
 executable formal semantics for an existing language from its implementation
 source, test cases, and sample runs, with the work driven by an AI agent.
 
-The target language is [GNU bc](https://www.gnu.org/software/bc/), version
-**1.07.1**. The semantics are formalised in [Lean 4](https://leanprover.github.io/).
+The target language is the POSIX bc subset, checked against
+[GNU bc](https://www.gnu.org/software/bc/) **1.07.1** as the reference
+implementation. The semantics are formalised in
+[Lean 4](https://leanprover.github.io/).
 
 ## Scope
 
@@ -20,7 +22,7 @@ but is not part of this repository.
 
 ## Parser (tree-sitter)
 
-A standalone tree-sitter grammar for GNU bc 1.07.1 surface syntax lives under
+A standalone tree-sitter grammar for POSIX bc surface syntax lives under
 `parser/`. It does not require Lean or Lake — only the [tree-sitter
 CLI](https://tree-sitter.github.io/tree-sitter/cli) (**0.25.x** recommended).
 
@@ -78,7 +80,7 @@ make cache-refresh
 ### Run
 
 ```bash
-# Run a bc program (interpreter stub)
+# Run a bc program
 make run BC=examples/hello.bc
 
 # Parse to AST (golden test CLI)
@@ -106,7 +108,7 @@ under `tests/semantics/` and are not exercised by parser or AST tests.
 ## Project Structure
 
 - `parser/`          — tree-sitter grammar (`parser/tree-sitter-bc/`)
-- `tests/`           — bc reference programs and parser/semantic fixtures
+- `tests/`           — POSIX bc reference programs and parser/semantic fixtures
 - `Bc/`            — surface AST and tree-sitter bridge (`Bc` namespace)
 - `Main.lean`      — interpreter entry point
 - `lakefile.lean`  — Lake build configuration

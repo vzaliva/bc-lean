@@ -1,10 +1,10 @@
 /-
-  Fuel-bounded big-step operational semantics for GNU bc 1.07.1.
+  Fuel-bounded big-step operational semantics for the POSIX bc subset.
 
-  The evaluator is intentionally executable: effects such as read(), random(),
-  and output are modelled in IO.  Recursive semantic functions are fuel-bounded
-  and total; parser/pretty-printer infrastructure may remain partial, but this
-  module does not use partial definitions.
+  The evaluator is executable and models program output in IO. Recursive
+  semantic functions are fuel-bounded and total; parser/pretty-printer
+  infrastructure may remain partial, but this module does not use partial
+  definitions.
 -/
 
 import Bc.Syntax
@@ -304,18 +304,10 @@ structure RuntimeState where
   ibase : Nat := 10
   obase : Nat := 10
   scale : Nat := 0
-  last : Num := Num.zero
-  history : Int := -1
-  input : List Char := []
   output : String := ""
   outCol : Nat := 0
-  halted : Bool := false
+  stopped : Bool := false
   deriving Repr
-
-inductive Value where
-  | num (n : Num)
-  | void
-  deriving Repr, BEq
 
 inductive Result (α : Type) where
   | ok (state : RuntimeState) (value : α)
@@ -326,13 +318,11 @@ inductive Result (α : Type) where
 inductive Control where
   | normal
   | break
-  | continue
-  | return (value : Value)
+  | return (value : Option Num)
   | stop
   deriving Repr, BEq
 
-def initialState (input : String := "") : RuntimeState :=
-  { input := input.toList }
+def initialState : RuntimeState := {}
 
 private def assocGet? [BEq α] (xs : List (α × β)) (k : α) : Option β :=
   match xs with
@@ -456,9 +446,6 @@ private def specialValue (st : RuntimeState) : SpecialVar → Num
   | .ibase => Num.ofInt (Int.ofNat st.ibase)
   | .obase => Num.ofInt (Int.ofNat st.obase)
   | .scale => Num.ofInt (Int.ofNat st.scale)
-  | .last => st.last
-  | .history => Num.ofInt st.history
-  | .dot => st.last
 
 private def assignSpecial (st : RuntimeState) (v : SpecialVar) (n : Num) : RuntimeState :=
   match v with
@@ -483,8 +470,6 @@ private def assignSpecial (st : RuntimeState) (v : SpecialVar) (n : Num) : Runti
         else if raw.natAbs > bcScaleMax then bcScaleMax
         else raw.natAbs
       { st with scale := scale }
-  | .last | .dot => { st with last := n }
-  | .history => { st with history := n.intPart }
 
 private def appendOutputChar (st : RuntimeState) (c : Char) : RuntimeState :=
   if c == '\n' then
@@ -501,7 +486,7 @@ private def appendOutput (st : RuntimeState) (s : String) : RuntimeState :=
 
 private def printNumNoNewline (st : RuntimeState) (n : Num) : RuntimeState :=
   let s := Num.toBaseString n st.obase
-  { (appendOutput st s) with last := n }
+  appendOutput st s
 
 private def printNumLine (st : RuntimeState) (n : Num) : RuntimeState :=
   appendOutput (printNumNoNewline st n) "\n"
@@ -570,7 +555,7 @@ private def bindAutoDecl (st : RuntimeState) (decl : ParamDecl) : RuntimeState :
       | .scalar n =>
           { st with frames :=
               { frame with scalars := assocSet frame.scalars n Num.zero } :: rest }
-      | .array n | .refArray n | .varArray n =>
+      | .array n =>
           let (st, id) := freshArray st
           match st.frames with
           | frame :: rest =>
@@ -586,41 +571,39 @@ private def isTopAssignment : Expr → Bool
 
 mutual
 
-def evalExpr (fuel : Nat) (st : RuntimeState) (expr : Expr) : IO (Result Value) := do
+def evalExpr (fuel : Nat) (st : RuntimeState) (expr : Expr) : IO (Result Num) := do
   match fuel with
   | 0 => return .outOfFuel st
   | fuel' + 1 =>
       match expr with
       | .num raw =>
-          return .ok st (.num (Num.ofInputString raw (currentConstBase st)))
+          return .ok st (Num.ofInputString raw (currentConstBase st))
       | .var name =>
-          return .ok st (.num (lookupScalar st name))
+          return .ok st (lookupScalar st name)
       | .special v =>
-          return .ok st (.num (specialValue st v))
+          return .ok st (specialValue st v)
       | .arrayAccess name idxExpr =>
           match ← evalExpr fuel' st idxExpr with
-          | .ok st (.num idxNum) =>
+          | .ok st idxNum =>
               match indexOfNum? idxNum with
               | .ok idx =>
                   let (st, id) := ensureArrayId st name
-                  return .ok st (.num (getArrayElem st id idx))
+                  return .ok st (getArrayElem st id idx)
               | .error msg => return .runtimeError st msg
-          | .ok st .void => return .runtimeError st "void expression as subscript"
           | .outOfFuel st => return .outOfFuel st
           | .runtimeError st msg => return .runtimeError st msg
       | .assign lhs op rhs =>
           evalAssign fuel' st lhs op rhs
       | .rel first rest =>
           match ← evalExpr fuel' st first with
-          | .ok st (.num n) => evalRelChain fuel' st n rest
-          | .ok st .void => return .runtimeError st "void expression with comparison"
+          | .ok st n => evalRelChain fuel' st n rest
           | .outOfFuel st => return .outOfFuel st
           | .runtimeError st msg => return .runtimeError st msg
       | .bin op lhs rhs =>
           match ← evalExpr fuel' st lhs with
-          | .ok st (.num a) =>
+          | .ok st a =>
               match ← evalExpr fuel' st rhs with
-              | .ok st (.num b) =>
+              | .ok st b =>
                   let result? :=
                     match op with
                     | .add => Except.ok (Num.add a b)
@@ -630,37 +613,10 @@ def evalExpr (fuel : Nat) (st : RuntimeState) (expr : Expr) : IO (Result Value) 
                     | .mod => Num.modulo? a b st.scale
                     | .pow => Num.pow? a b st.scale
                   match result? with
-                  | .ok n => return .ok st (.num n)
+                  | .ok n => return .ok st n
                   | .error msg => return .runtimeError st msg
-              | .ok st .void => return .runtimeError st "void expression with binary operator"
               | .outOfFuel st => return .outOfFuel st
               | .runtimeError st msg => return .runtimeError st msg
-          | .ok st .void => return .runtimeError st "void expression with binary operator"
-          | .outOfFuel st => return .outOfFuel st
-          | .runtimeError st msg => return .runtimeError st msg
-      | .logic op lhs rhs =>
-          match ← evalExpr fuel' st lhs with
-          | .ok st (.num a) =>
-              match op with
-              | .and =>
-                  if a.isZero then
-                    return .ok st (.num Num.zero)
-                  else
-                    match ← evalExpr fuel' st rhs with
-                    | .ok st (.num b) => return .ok st (.num (boolNum (!b.isZero)))
-                    | .ok st .void => return .runtimeError st "void expression with &&"
-                    | .outOfFuel st => return .outOfFuel st
-                    | .runtimeError st msg => return .runtimeError st msg
-              | .or =>
-                  if !a.isZero then
-                    return .ok st (.num Num.one)
-                  else
-                    match ← evalExpr fuel' st rhs with
-                    | .ok st (.num b) => return .ok st (.num (boolNum (!b.isZero)))
-                    | .ok st .void => return .runtimeError st "void expression with ||"
-                    | .outOfFuel st => return .outOfFuel st
-                    | .runtimeError st msg => return .runtimeError st msg
-          | .ok st .void => return .runtimeError st "void expression with boolean operator"
           | .outOfFuel st => return .outOfFuel st
           | .runtimeError st msg => return .runtimeError st msg
       | .unary op arg =>
@@ -673,21 +629,20 @@ def evalExpr (fuel : Nat) (st : RuntimeState) (expr : Expr) : IO (Result Value) 
           evalExpr fuel' st body
 
 def evalRelChain (fuel : Nat) (st : RuntimeState) (left : Num)
-    (rest : List (RelOp × Expr)) : IO (Result Value) := do
+    (rest : List (RelOp × Expr)) : IO (Result Num) := do
   match fuel with
   | 0 => return .outOfFuel st
   | fuel' + 1 =>
       match rest with
-      | [] => return .ok st (.num left)
+      | [] => return .ok st left
       | (op, rhs) :: tail =>
           match ← evalExpr fuel' st rhs with
-          | .ok st (.num right) =>
+          | .ok st right =>
               let out := boolNum (applyRel op left right)
               if tail.isEmpty then
-                return .ok st (.num out)
+                return .ok st out
               else
                 evalRelChain fuel' st out tail
-          | .ok st .void => return .runtimeError st "void expression with comparison"
           | .outOfFuel st => return .outOfFuel st
           | .runtimeError st msg => return .runtimeError st msg
 
@@ -701,13 +656,12 @@ def evalLValRef (fuel : Nat) (st : RuntimeState) (lv : LVal) :
       | .special v => return .ok st (Sum.inl (Sum.inr v))
       | .array name idxExpr =>
           match ← evalExpr fuel' st idxExpr with
-          | .ok st (.num idxNum) =>
+          | .ok st idxNum =>
               match indexOfNum? idxNum with
               | .ok idx =>
                   let (st, id) := ensureArrayId st name
                   return .ok st (Sum.inr (id, idx))
               | .error msg => return .runtimeError st msg
-          | .ok st .void => return .runtimeError st "void expression as subscript"
           | .outOfFuel st => return .outOfFuel st
           | .runtimeError st msg => return .runtimeError st msg
 
@@ -748,14 +702,14 @@ def bumpRef (st : RuntimeState) (ref : Sum (Name ⊕ SpecialVar) (ArrayId × Nat
       (writeRef st ref newValue, old, newValue)
 
 def evalAssign (fuel : Nat) (st : RuntimeState) (lhs : LVal) (op : AssignOp) (rhs : Expr) :
-    IO (Result Value) := do
+    IO (Result Num) := do
   match fuel with
   | 0 => return .outOfFuel st
   | fuel' + 1 =>
       match ← evalLValRef fuel' st lhs with
       | .ok st ref =>
           match ← evalExpr fuel' st rhs with
-          | .ok st (.num rhsValue) =>
+          | .ok st rhsValue =>
               let old := readRef st ref
               let result? :=
                 match op with
@@ -767,30 +721,22 @@ def evalAssign (fuel : Nat) (st : RuntimeState) (lhs : LVal) (op : AssignOp) (rh
                 | .modAssign => Num.modulo? old rhsValue st.scale
                 | .powAssign => Num.pow? old rhsValue st.scale
               match result? with
-              | .ok n => return .ok (writeRef st ref n) (.num n)
+              | .ok n => return .ok (writeRef st ref n) n
               | .error msg => return .runtimeError st msg
-          | .ok st .void => return .runtimeError st "Assignment of a void expression"
           | .outOfFuel st => return .outOfFuel st
           | .runtimeError st msg => return .runtimeError st msg
       | .outOfFuel st => return .outOfFuel st
       | .runtimeError st msg => return .runtimeError st msg
 
 def evalUnary (fuel : Nat) (st : RuntimeState) (op : UnOp) (arg : Expr) :
-    IO (Result Value) := do
+    IO (Result Num) := do
   match fuel with
   | 0 => return .outOfFuel st
   | fuel' + 1 =>
       match op with
       | .neg =>
           match ← evalExpr fuel' st arg with
-          | .ok st (.num n) => return .ok st (.num (Num.neg n))
-          | .ok st .void => return .runtimeError st "void expression with unary -"
-          | .outOfFuel st => return .outOfFuel st
-          | .runtimeError st msg => return .runtimeError st msg
-      | .not =>
-          match ← evalExpr fuel' st arg with
-          | .ok st (.num n) => return .ok st (.num (boolNum n.isZero))
-          | .ok st .void => return .runtimeError st "void expression with !"
+          | .ok st n => return .ok st (Num.neg n)
           | .outOfFuel st => return .outOfFuel st
           | .runtimeError st msg => return .runtimeError st msg
       | .preIncr | .preDecr | .postIncr | .postDecr =>
@@ -801,53 +747,34 @@ def evalUnary (fuel : Nat) (st : RuntimeState) (op : UnOp) (arg : Expr) :
               | .ok st ref =>
                   let (st, old, newValue) := bumpRef st ref (op == .preIncr || op == .postIncr)
                   match op with
-                  | .preIncr | .preDecr => return .ok st (.num newValue)
-                  | .postIncr | .postDecr => return .ok st (.num old)
-                  | _ => return .ok st (.num newValue)
+                  | .preIncr | .preDecr => return .ok st newValue
+                  | .postIncr | .postDecr => return .ok st old
+                  | .neg => return .ok st newValue
               | .outOfFuel st => return .outOfFuel st
               | .runtimeError st msg => return .runtimeError st msg
 
 def evalBuiltin (fuel : Nat) (st : RuntimeState) (fn : Builtin) (arg : Option Expr) :
-    IO (Result Value) := do
+    IO (Result Num) := do
   match fuel with
   | 0 => return .outOfFuel st
   | fuel' + 1 =>
       match fn, arg with
-      | .read, none =>
-          let input := st.input.dropWhile fun c => c.isWhitespace
-          let input ←
-            if input.isEmpty then
-              let line ← (← IO.getStdin).getLine
-              pure line.toList
-            else
-              pure input
-          let input := input.dropWhile fun c => c.isWhitespace
-          let token := String.ofList (input.takeWhile fun c => !c.isWhitespace)
-          let rest := input.dropWhile fun c => !c.isWhitespace
-          let n := Num.ofInputString token st.ibase
-          return .ok { st with input := rest } (.num n)
-      | .random, none =>
-          let r ← IO.rand 0 2147483647
-          return .ok st (.num (Num.ofInt (Int.ofNat r)))
       | .length, some e =>
           match ← evalExpr fuel' st e with
-          | .ok st (.num n) => return .ok st (.num (Num.ofInt (Int.ofNat n.length)))
-          | .ok st .void => return .runtimeError st "void expression in length()"
+          | .ok st n => return .ok st (Num.ofInt (Int.ofNat n.length))
           | .outOfFuel st => return .outOfFuel st
           | .runtimeError st msg => return .runtimeError st msg
       | .scale, some e =>
           match ← evalExpr fuel' st e with
-          | .ok st (.num n) => return .ok st (.num (Num.ofInt (Int.ofNat n.scale)))
-          | .ok st .void => return .runtimeError st "void expression in scale()"
+          | .ok st n => return .ok st (Num.ofInt (Int.ofNat n.scale))
           | .outOfFuel st => return .outOfFuel st
           | .runtimeError st msg => return .runtimeError st msg
       | .sqrt, some e =>
           match ← evalExpr fuel' st e with
-          | .ok st (.num n) =>
+          | .ok st n =>
               match Num.sqrt? n st.scale with
-              | .ok r => return .ok st (.num r)
+              | .ok r => return .ok st r
               | .error msg => return .runtimeError st msg
-          | .ok st .void => return .runtimeError st "void expression in sqrt()"
           | .outOfFuel st => return .outOfFuel st
           | .runtimeError st msg => return .runtimeError st msg
       | _, _ => return .runtimeError st "invalid builtin arity"
@@ -864,8 +791,7 @@ def evalArgValues (fuel : Nat) (st : RuntimeState) (args : List Arg) :
             match arg with
             | .expr e =>
                 match ← evalExpr fuel' st e with
-                | .ok st (.num n) => pure (Result.ok st (Sum.inl n))
-                | .ok st .void => pure (Result.runtimeError st "void argument")
+                | .ok st n => pure (Result.ok st (Sum.inl n))
                 | .outOfFuel st => pure (Result.outOfFuel st)
                 | .runtimeError st msg => pure (Result.runtimeError st msg)
             | .arrayRef name =>
@@ -904,21 +830,13 @@ def bindParams (st : RuntimeState) (params : List ParamDecl) (args : List (Sum N
               st := { st with frames :=
                 { frame with arrays := assocSet frame.arrays name dstId } :: rest }
           | [] => throw "internal error: missing call frame"
-      | .refArray name, .inr actual | .varArray name, .inr actual =>
-          let (st1, srcId) := ensureArrayId st actual
-          st := st1
-          match st.frames with
-          | frame :: rest =>
-              st := { st with frames :=
-                { frame with arrays := assocSet frame.arrays name srcId } :: rest }
-          | [] => throw "internal error: missing call frame"
       | .scalar name, .inr _ => throw s!"Parameter type mismatch, parameter {name}"
-      | .array name, .inl _ | .refArray name, .inl _ | .varArray name, .inl _ =>
+      | .array name, .inl _ =>
           throw s!"Parameter type mismatch, parameter {name}"
     return st
 
 def evalCall (fuel : Nat) (st : RuntimeState) (name : Name) (args : List Arg) :
-    IO (Result Value) := do
+    IO (Result Num) := do
   match fuel with
   | 0 => return .outOfFuel st
   | fuel' + 1 =>
@@ -935,23 +853,17 @@ def evalCall (fuel : Nat) (st : RuntimeState) (name : Name) (args : List Arg) :
                   let st := bindAutoDecls st (collectAutos defn.body)
                   match ← evalBody fuel' st defn.body with
                   | .ok st .normal =>
-                      let value := if defn.void then Value.void else Value.num Num.zero
-                      return .ok { st with frames := st.frames.drop 1 } value
+                      return .ok { st with frames := st.frames.drop 1 } Num.zero
                   | .ok st (.return v) =>
                       let value :=
-                        match v, defn.void with
-                        | .void, true => Value.void
-                        | .void, false => Value.num Num.zero
-                        | .num n, false => Value.num n
-                        | .num _, true => Value.void
+                        match v with
+                        | none => Num.zero
+                        | some n => n
                       return .ok { st with frames := st.frames.drop 1 } value
                   | .ok st .break =>
                       return Result.runtimeError { st with frames := st.frames.drop 1 }
                         "Break outside a loop"
-                  | .ok st .continue =>
-                      return Result.runtimeError { st with frames := st.frames.drop 1 }
-                        "Continue outside a loop"
-                  | .ok st .stop => return .ok { st with frames := st.frames.drop 1 } .void
+                  | .ok st .stop => return .ok { st with frames := st.frames.drop 1 } Num.zero
                   | .outOfFuel st => return .outOfFuel { st with frames := st.frames.drop 1 }
                   | .runtimeError st msg => return .runtimeError { st with frames := st.frames.drop 1 } msg
           | .outOfFuel st => return .outOfFuel st
@@ -964,121 +876,71 @@ def evalStmt (fuel : Nat) (st : RuntimeState) (stmt : Stmt) : IO (Result Control
       match stmt with
       | .expr e =>
           match ← evalExpr fuel' st e with
-          | .ok st (.num n) =>
+          | .ok st n =>
               if isTopAssignment e then return .ok st .normal
               else return .ok (printNumLine st n) .normal
-          | .ok st .void => return .ok st .normal
           | .outOfFuel st => return .outOfFuel st
           | .runtimeError st msg => return .runtimeError st msg
       | .str s =>
           return .ok (appendOutput st (decodeBcString s)) .normal
       | .auto _ =>
           return .ok st .normal
-      | .if cond thenBranch elseBranch =>
+      | .if cond thenBranch =>
           match ← evalExpr fuel' st cond with
-          | .ok st (.num n) =>
-              if n.isZero then
-                match elseBranch with
-                | none => return .ok st .normal
-                | some e => evalStmt fuel' st e
-              else
-                evalStmt fuel' st thenBranch
-          | .ok st .void => return .runtimeError st "void expression in if"
+          | .ok st n =>
+              if n.isZero then return .ok st .normal else evalStmt fuel' st thenBranch
           | .outOfFuel st => return .outOfFuel st
           | .runtimeError st msg => return .runtimeError st msg
       | .while cond body =>
           match ← evalExpr fuel' st cond with
-          | .ok st (.num n) =>
+          | .ok st n =>
               if n.isZero then
                 return .ok st .normal
               else
                 match ← evalStmt fuel' st body with
-                | .ok st .normal | .ok st .continue => evalStmt fuel' st stmt
+                | .ok st .normal => evalStmt fuel' st stmt
                 | .ok st .break => return .ok st .normal
                 | .ok st c => return .ok st c
                 | .outOfFuel st => return .outOfFuel st
                 | .runtimeError st msg => return .runtimeError st msg
-          | .ok st .void => return .runtimeError st "void expression in while"
           | .outOfFuel st => return .outOfFuel st
           | .runtimeError st msg => return .runtimeError st msg
       | .for init cond update body =>
-          match init with
-          | some initExpr =>
-              match ← evalExpr fuel' st initExpr with
-              | .ok st _ => evalFor fuel' st cond update body
-              | .outOfFuel st => return .outOfFuel st
-              | .runtimeError st msg => return .runtimeError st msg
-          | none => evalFor fuel' st cond update body
-      | .break => return .ok st .break
-      | .continue => return .ok st .continue
-      | .return none => return .ok st (.return .void)
-      | .return (some e) =>
-          match ← evalExpr fuel' st e with
-          | .ok st v => return .ok st (.return v)
+          match ← evalExpr fuel' st init with
+          | .ok st _ => evalFor fuel' st cond update body
           | .outOfFuel st => return .outOfFuel st
           | .runtimeError st msg => return .runtimeError st msg
-      | .quit | .halt => return .ok { st with halted := true } .stop
-      | .print items =>
-          evalPrintItems fuel' st items
-      | .warranty =>
-          return .ok (appendOutput st "GNU bc comes with ABSOLUTELY NO WARRANTY.\n") .normal
-      | .limits =>
-          let out :=
-            s!"BC_BASE_MAX     = {bcBaseMax}\n" ++
-            s!"BC_DIM_MAX      = {bcDimMax}\n" ++
-            s!"BC_SCALE_MAX    = {bcScaleMax}\n"
-          return .ok (appendOutput st out) .normal
+      | .break => return .ok st .break
+      | .return none => return .ok st (.return none)
+      | .return (some e) =>
+          match ← evalExpr fuel' st e with
+          | .ok st n => return .ok st (.return (some n))
+          | .outOfFuel st => return .outOfFuel st
+          | .runtimeError st msg => return .runtimeError st msg
+      | .quit => return .ok { st with stopped := true } .stop
       | .block body =>
           evalBody fuel' st body
 
-def evalPrintItems (fuel : Nat) (st : RuntimeState) (items : List PrintItem) :
+def evalFor (fuel : Nat) (st : RuntimeState) (cond update : Expr) (body : Stmt) :
     IO (Result Control) := do
   match fuel with
   | 0 => return .outOfFuel st
   | fuel' + 1 =>
-      match items with
-      | [] => return .ok st .normal
-      | item :: rest =>
-          let itemResult : Result Control ←
-            match item with
-            | .str s => pure (Result.ok (appendOutput st (decodeBcString s)) .normal)
-            | .expr e =>
-                match ← evalExpr fuel' st e with
-                | .ok st (.num n) => pure (Result.ok (printNumNoNewline st n) .normal)
-                | .ok st .void => pure (Result.runtimeError st "void expression in print")
-                | .outOfFuel st => pure (Result.outOfFuel st)
-                | .runtimeError st msg => pure (Result.runtimeError st msg)
-          match itemResult with
-          | .ok st Control.normal => evalPrintItems fuel' st rest
-          | .ok st c => return .ok st c
-          | .outOfFuel st => return .outOfFuel st
-          | .runtimeError st msg => return .runtimeError st msg
-
-def evalFor (fuel : Nat) (st : RuntimeState) (cond update : Option Expr) (body : Stmt) :
-    IO (Result Control) := do
-  match fuel with
-  | 0 => return .outOfFuel st
-  | fuel' + 1 =>
-      let condExpr := cond.getD (.num "1")
-      match ← evalExpr fuel' st condExpr with
-      | .ok st (.num n) =>
+      match ← evalExpr fuel' st cond with
+      | .ok st n =>
           if n.isZero then
             return .ok st .normal
           else
             match ← evalStmt fuel' st body with
-            | .ok st .normal | .ok st .continue =>
-                match update with
-                | none => evalFor fuel' st cond update body
-                | some upd =>
-                    match ← evalExpr fuel' st upd with
-                    | .ok st _ => evalFor fuel' st cond update body
-                    | .outOfFuel st => return .outOfFuel st
-                    | .runtimeError st msg => return .runtimeError st msg
+            | .ok st .normal =>
+                match ← evalExpr fuel' st update with
+                | .ok st _ => evalFor fuel' st cond update body
+                | .outOfFuel st => return .outOfFuel st
+                | .runtimeError st msg => return .runtimeError st msg
             | .ok st .break => return .ok st .normal
             | .ok st c => return .ok st c
             | .outOfFuel st => return .outOfFuel st
             | .runtimeError st msg => return .runtimeError st msg
-      | .ok st .void => return .runtimeError st "void expression in for condition"
       | .outOfFuel st => return .outOfFuel st
       | .runtimeError st msg => return .runtimeError st msg
 
@@ -1123,21 +985,12 @@ private def stmtContainsQuit : Stmt → Bool
   | .expr _ => false
   | .str _ => false
   | .auto _ => false
-  | .if _ thenBranch elseBranch =>
-      stmtContainsQuit thenBranch ||
-        match elseBranch with
-        | none => false
-        | some branch => stmtContainsQuit branch
+  | .if _ thenBranch => stmtContainsQuit thenBranch
   | .while _ body => stmtContainsQuit body
   | .for _ _ _ body => stmtContainsQuit body
   | .break => false
-  | .continue => false
   | .return _ => false
   | .quit => true
-  | .halt => false
-  | .print _ => false
-  | .warranty => false
-  | .limits => false
   | .block body => bodyContainsQuit body
 
 private def stmtsContainQuit : List Stmt → Bool
@@ -1168,13 +1021,12 @@ def evalProgramItems (fuel : Nat) (st : RuntimeState) (items : Program) :
       | [] => return .ok st .normal
       | item :: rest =>
           if topItemContainsQuit item then
-            return .ok { st with halted := true } .stop
+            return .ok { st with stopped := true } .stop
           match ← evalTopItem fuel' st item with
           | .ok st .normal =>
-              if st.halted then return .ok st .stop else evalProgramItems fuel' st rest
+              if st.stopped then return .ok st .stop else evalProgramItems fuel' st rest
           | .ok st .stop => return .ok st .stop
           | .ok st .break => return .runtimeError st "Break outside a loop"
-          | .ok st .continue => return .runtimeError st "Continue outside a loop"
           | .ok st (.return _) => return .runtimeError st "Return outside of a function"
           | .outOfFuel st => return .outOfFuel st
           | .runtimeError st msg => return .runtimeError st msg
@@ -1191,7 +1043,7 @@ def runProgramWithState (fuel : Nat) (st : RuntimeState) (program : Program) : I
   | .outOfFuel st => return .outOfFuel st
   | .runtimeError st msg => return .runtimeError st msg
 
-def runProgram (fuel : Nat) (input : String) (program : Program) : IO RunResult :=
-  runProgramWithState fuel (initialState input) program
+def runProgram (fuel : Nat) (program : Program) : IO RunResult :=
+  runProgramWithState fuel initialState program
 
 end Bc

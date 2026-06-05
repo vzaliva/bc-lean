@@ -187,7 +187,7 @@
     "fields": {
       "argument": {
         "multiple": false,
-        "required": false,
+        "required": true,
         "types": [
           {
             "type": "expression",
@@ -229,25 +229,6 @@
     }
   },
   {
-    "type": "else_clause",
-    "named": true,
-    "fields": {},
-    "children": {
-      "multiple": true,
-      "required": true,
-      "types": [
-        {
-          "type": "newline",
-          "named": true
-        },
-        {
-          "type": "statement",
-          "named": true
-        }
-      ]
-    }
-  },
-  {
     "type": "expression",
     "named": true,
     "fields": {},
@@ -260,7 +241,7 @@
           "named": true
         },
         {
-          "type": "logical_or_expression",
+          "type": "relational_expression",
           "named": true
         }
       ]
@@ -297,7 +278,7 @@
       },
       "condition": {
         "multiple": false,
-        "required": false,
+        "required": true,
         "types": [
           {
             "type": "expression",
@@ -307,7 +288,7 @@
       },
       "init": {
         "multiple": false,
-        "required": false,
+        "required": true,
         "types": [
           {
             "type": "expression",
@@ -317,7 +298,7 @@
       },
       "update": {
         "multiple": false,
-        "required": false,
+        "required": true,
         "types": [
           {
             "type": "expression",
@@ -401,16 +382,6 @@
     "type": "if_statement",
     "named": true,
     "fields": {
-      "alternative": {
-        "multiple": false,
-        "required": false,
-        "types": [
-          {
-            "type": "else_clause",
-            "named": true
-          }
-        ]
-      },
       "condition": {
         "multiple": false,
         "required": true,
@@ -438,84 +409,6 @@
       "types": [
         {
           "type": "newline",
-          "named": true
-        }
-      ]
-    }
-  },
-  {
-    "type": "logical_and_expression",
-    "named": true,
-    "fields": {
-      "right": {
-        "multiple": true,
-        "required": false,
-        "types": [
-          {
-            "type": "logical_not_expression",
-            "named": true
-          }
-        ]
-      }
-    },
-    "children": {
-      "multiple": false,
-      "required": true,
-      "types": [
-        {
-          "type": "logical_not_expression",
-          "named": true
-        }
-      ]
-    }
-  },
-  {
-    "type": "logical_not_expression",
-    "named": true,
-    "fields": {
-      "operand": {
-        "multiple": false,
-        "required": false,
-        "types": [
-          {
-            "type": "relational_expression",
-            "named": true
-          }
-        ]
-      }
-    },
-    "children": {
-      "multiple": false,
-      "required": false,
-      "types": [
-        {
-          "type": "relational_expression",
-          "named": true
-        }
-      ]
-    }
-  },
-  {
-    "type": "logical_or_expression",
-    "named": true,
-    "fields": {
-      "right": {
-        "multiple": true,
-        "required": false,
-        "types": [
-          {
-            "type": "logical_and_expression",
-            "named": true
-          }
-        ]
-      }
-    },
-    "children": {
-      "multiple": false,
-      "required": true,
-      "types": [
-        {
-          "type": "logical_and_expression",
           "named": true
         }
       ]
@@ -587,11 +480,6 @@
         }
       ]
     }
-  },
-  {
-    "type": "newline",
-    "named": true,
-    "fields": {}
   },
   {
     "type": "parameter_list",
@@ -729,55 +617,6 @@
     }
   },
   {
-    "type": "print_element",
-    "named": true,
-    "fields": {},
-    "children": {
-      "multiple": false,
-      "required": true,
-      "types": [
-        {
-          "type": "expression",
-          "named": true
-        },
-        {
-          "type": "string",
-          "named": true
-        }
-      ]
-    }
-  },
-  {
-    "type": "print_list",
-    "named": true,
-    "fields": {},
-    "children": {
-      "multiple": true,
-      "required": true,
-      "types": [
-        {
-          "type": "print_element",
-          "named": true
-        }
-      ]
-    }
-  },
-  {
-    "type": "print_statement",
-    "named": true,
-    "fields": {},
-    "children": {
-      "multiple": false,
-      "required": true,
-      "types": [
-        {
-          "type": "print_list",
-          "named": true
-        }
-      ]
-    }
-  },
-  {
     "type": "rel_op",
     "named": true,
     "fields": {}
@@ -821,16 +660,17 @@
   {
     "type": "return_statement",
     "named": true,
-    "fields": {},
-    "children": {
-      "multiple": false,
-      "required": false,
-      "types": [
-        {
-          "type": "expression",
-          "named": true
-        }
-      ]
+    "fields": {
+      "value": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "expression",
+            "named": true
+          }
+        ]
+      }
     }
   },
   {
@@ -883,10 +723,6 @@
           "named": true
         },
         {
-          "type": "continue_statement",
-          "named": true
-        },
-        {
           "type": "expression_statement",
           "named": true
         },
@@ -895,19 +731,7 @@
           "named": true
         },
         {
-          "type": "halt_statement",
-          "named": true
-        },
-        {
           "type": "if_statement",
-          "named": true
-        },
-        {
-          "type": "limits_statement",
-          "named": true
-        },
-        {
-          "type": "print_statement",
           "named": true
         },
         {
@@ -920,10 +744,6 @@
         },
         {
           "type": "string_statement",
-          "named": true
-        },
-        {
-          "type": "warranty_statement",
           "named": true
         },
         {
@@ -1053,10 +873,6 @@
     }
   },
   {
-    "type": "!",
-    "named": false
-  },
-  {
     "type": "!=",
     "named": false
   },
@@ -1070,14 +886,6 @@
   },
   {
     "type": "%=",
-    "named": false
-  },
-  {
-    "type": "&",
-    "named": false
-  },
-  {
-    "type": "&&",
     "named": false
   },
   {
@@ -1122,10 +930,6 @@
   },
   {
     "type": "-=",
-    "named": false
-  },
-  {
-    "type": ".",
     "named": false
   },
   {
@@ -1194,27 +998,11 @@
     "named": true
   },
   {
-    "type": "continue_statement",
-    "named": true
-  },
-  {
     "type": "define",
     "named": false
   },
   {
-    "type": "else",
-    "named": false
-  },
-  {
     "type": "for",
-    "named": false
-  },
-  {
-    "type": "halt_statement",
-    "named": true
-  },
-  {
-    "type": "history",
     "named": false
   },
   {
@@ -1230,26 +1018,17 @@
     "named": false
   },
   {
-    "type": "last",
-    "named": false
-  },
-  {
     "type": "length",
     "named": false
-  },
-  {
-    "type": "limits_statement",
-    "named": true
-  },
-  {
-    "type": "line_comment",
-    "named": true,
-    "extra": true
   },
   {
     "type": "line_continuation",
     "named": true,
     "extra": true
+  },
+  {
+    "type": "newline",
+    "named": true
   },
   {
     "type": "number",
@@ -1260,20 +1039,8 @@
     "named": false
   },
   {
-    "type": "print",
-    "named": false
-  },
-  {
     "type": "quit_statement",
     "named": true
-  },
-  {
-    "type": "random",
-    "named": false
-  },
-  {
-    "type": "read",
-    "named": false
   },
   {
     "type": "return",
@@ -1288,23 +1055,11 @@
     "named": false
   },
   {
-    "type": "void",
-    "named": false
-  },
-  {
-    "type": "warranty_statement",
-    "named": true
-  },
-  {
     "type": "while",
     "named": false
   },
   {
     "type": "{",
-    "named": false
-  },
-  {
-    "type": "||",
     "named": false
   },
   {

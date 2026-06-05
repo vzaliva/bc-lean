@@ -6,7 +6,7 @@ lab notebook for the experiment.
 
 ---
 
-## Step 1 — Standalone tree-sitter parser (GNU bc 1.07.1)
+## Step 1 — Standalone tree-sitter parser (POSIX bc)
 
 **Model:** Cursor Agent (Composer-2.5)  
 **Duration:** ~45 minutes wall-clock for the full session (planning, plan
@@ -19,7 +19,7 @@ incremental test fixes.
 
 > Start with a parser using tree-sitter. Set up a minimal tree-sitter layout
 > (grammar, Makefile, root `config.json`; no full language bindings). Copy all
-> unit tests from `bc-1.07.1/Test/` and `bc-1.07.1/Examples/` into a `tests/`
+> POSIX-compatible tests from the GNU bc 1.07.1 source tree into a `tests/`
 > folder and use them to regression-test the parser. Develop a tree-sitter grammar
 > that correctly parses all `.b`/`.bc` test files; verify with `tree-sitter
 > generate` and `tree-sitter parse --stat`. **No Lean integration** — parser
@@ -37,7 +37,7 @@ disambiguation workflow.)
 | Grammar source | `parser/tree-sitter-bc/grammar.js` (~360 lines) |
 | Generated parser | `parser/tree-sitter-bc/src/` (`grammar.json`, `parser.c`, `node-types.json`) |
 | Build | `parser/Makefile`, root `Makefile` targets `parser`, `parser-test`, `parser-all` |
-| Test corpus | `tests/Test/` (18 files from upstream), `tests/Examples/` (4 files) |
+| Test corpus | `tests/Test/` (POSIX-compatible upstream files) |
 | Regression script | `scripts/parse_all_tests.sh` |
 | Docs | `README.md` (Parser section), `AGENTS.md`, `tests/README.md` |
 
@@ -48,10 +48,10 @@ output comparison against reference `bc`.
 
 ```bash
 make parser-all
-# parse_all_tests: 22 passed, 0 failed (22 total)
+# parse_all_tests: 37 passed, 0 failed (37 total)
 ```
 
-Regression set: all `tests/**/*.b` and `tests/**/*.bc` (22 files). Shell
+Regression set: POSIX `.b` and `.bc` files under `tests/`. Shell
 wrappers `tests/Test/signum` and `tests/Test/timetest` are copied for
 provenance but excluded from parser regression.
 
@@ -65,17 +65,15 @@ Ground truth: GNU bc 1.07.1 `bc/bc.y` and `bc/scan.l`.
   `repeat` on each precedence level.
 - Significant newlines at top level; `statement_sequence` for semicolon-separated
   statements on one line.
-- `\` **line continuation** as an extra (needed for `mul.b`, `twins.b`).
+- `\` **line continuation** as an extra.
 - Multiline **strings** with embedded newlines (`testfn.b`, `checklib.b`).
-- GNU extensions: `if`/`else`, `&&`/`||`, `print`, `define`/`auto`, array
-  params (`*a[]`, `&a[]`), builtins, pseudo-variables.
+- POSIX function definitions, autos, arrays, builtins, and special variables.
 - No external `scanner.c` required — number continuations and line continuations
   handled in `grammar.js` extras/tokens.
 
-Initial `tree-sitter generate` passed 17/22 tests; five failures
-(`pi.b`, `twins.b`, `checklib.b`, `mul.b`, `testfn.b`) were fixed by
-chained multiplicative expressions, `\` line continuation, and
-semicolon-separated statements inside function bodies.
+Initial `tree-sitter generate` passed most of the corpus. The remaining
+failures were fixed by chained multiplicative expressions, `\` line
+continuation, and semicolon-separated statements inside function bodies.
 
 ### Next step (planned)
 
@@ -147,11 +145,11 @@ project's "no warnings" standard.
 
 ```bash
 make parser-all
-# parse_all_tests: 22 passed, 0 failed (22 total)   (no generate warnings)
+# parse_all_tests: 37 passed, 0 failed (37 total)   (no generate warnings)
 ```
 
-Differential check vs `/usr/bin/bc` over ~30 snippets (precedence, associativity,
-assignment chains, incr/decr placement, builtins, `read()`, arrays) — **all
+Differential check vs `/usr/bin/bc` over POSIX snippets (precedence,
+associativity, assignment chains, incr/decr placement, builtins, arrays) — **all
 accept/reject verdicts now MATCH**, including the four cases above. Spot-checked
 parse trees: `a<b<c` yields one flat `relational_expression` with two `rel_op`s;
 `scale(5)` → `builtin_call`; `scale=3` → assignment with `special_variable` lhs.
@@ -206,9 +204,8 @@ Hard errors in `Bc.Constraints` (via `ExprInfo`):
 - `Comparison in first/third for expression`
 - `Return outside of a function.`
 
-**Deferred:** return-parenthesis / return-comparison rules when tree-sitter splits
-`return` and `(expr)` into separate statements (grammar limitation); void/break/
-continue placement; extension `ct_warn` noise (`&& operator`, etc.).
+**Deferred:** context-sensitive checks that depend on semantics rather than
+tree-sitter syntax.
 
 ### Tests
 
@@ -280,16 +277,15 @@ findings as Step 4 in this report, including timing, model, and prompt.
    trimmed XML character text, which included quote delimiters and could discard
    significant spaces/newlines. `Bc.Parser` now slices string spans from the
    original source and stores the literal body.
-5. **`define void f()` lost its `void` flag.** Void detection now inspects the
-   function prefix before the `name` field. Added a hard-failure fixture for
-   `Return expression in a void function.`
+5. **Function metadata was over-modelled.** Later POSIX pruning simplified
+   function definitions to the standard form.
 6. **Hard errors were conflated with GNU bc warnings.** Nested assignment,
    comparison in builtin arguments, comparison in `for` init/update, and
    return-parenthesis/return-comparison are accepted by default GNU bc; many are
    `ct_warn` diagnostics only in strict/warning modes. Converted those fixtures
    to `.output` goldens. Kept hard failures for `yyerror`-style checks available
-   without operational semantics: return outside a function, return value in a
-   void function, and `break`/`continue` outside a loop.
+   without operational semantics: return outside a function and `break` outside
+   a loop.
 7. **Exponentiation AST associativity was wrong.** `^` is right-associative in
    `bc.y`; the XML bridge had been left-folding the flat tree-sitter node. Added
    a right fold for power expressions.
@@ -303,11 +299,9 @@ fixed. Return-parenthesis and return-comparison diagnostics should **not** be ha
 parse failures for the GNU bc default semantics; they belong in a future
 diagnostics/strict-standard mode if the project models `bc -s` / `bc -w`.
 
-The remaining void-expression checks for calls to void functions should stay
-deferred until the project has a function symbol table / operational semantics:
-GNU bc's behaviour depends on function definitions and call resolution, not just
-local syntax. Extension `ct_warn` noise (`&&`, `print`, `void`, etc.) is likewise
-best handled by a later diagnostics mode.
+Definition-dependent call diagnostics should stay deferred until the project has
+a function symbol table / operational semantics: GNU bc's behaviour depends on
+function definitions and call resolution, not just local syntax.
 
 ### Verification
 
@@ -339,7 +333,7 @@ diagnostics should be postponed until the operational semantics are defined.
 1. **No type checker or constraint checker in the parser layer.** GNU bc is an
    untyped calculator language, so the project should not introduce a type
    checker. Context-sensitive checks such as `return` outside a function,
-   `break`/`continue` outside loops, void-function return values, and similar
+   `break` outside loops, and similar
    control-flow validity checks are not parser responsibilities. They are future
    semantics/context work.
 2. **No `Bc.Diagnostics` layer yet.** Warning/strict-mode diagnostics are useful,
@@ -379,10 +373,10 @@ lake build
 # Build completed successfully (20 jobs).
 
 make test
-# AST Test Summary: Passed: 23, Failed: 0, Skipped: 0
+# AST Test Summary: Passed: 38, Failed: 0, Skipped: 0
 
 make parser-all
-# parse_all_tests: 22 passed, 0 failed (22 total)
+# parse_all_tests: 37 passed, 0 failed (37 total)
 ```
 
 ---
@@ -395,13 +389,12 @@ poison-lang comparison, implementation, and regression testing.
 
 ### Request
 
-Implement the next project step: a big-step operational semantics for GNU bc
+Implement the next project step: a big-step operational semantics for POSIX bc
 that can also run as the definitional interpreter. Use poison-lang as
-inspiration, especially the choice to keep semantics in `IO` because bc has
-effectful builtins such as `read()` and `random()`. Do not use `partial`
-functions in the semantics. Faithfully implement bc semantics for the defined
-syntax and add tests that run existing fixtures through the interpreter and
-compare outputs against the GNU `bc` command.
+inspiration for an executable, `IO`-based evaluator. Do not use `partial`
+functions in the semantics. Faithfully implement bc semantics for the POSIX
+syntax and add tests that run fixtures through the interpreter and compare
+outputs against the GNU `bc` command.
 
 ### Reference material
 
@@ -409,7 +402,7 @@ compare outputs against the GNU `bc` command.
   `bc/storage.c`, `lib/number.c`, `bc/bc.y`, and `bc/libmath.b`.
 - Current poison-lang checkout at commit
   `f052d113586f742417c89438a346626720ce66c2`; `LeanPoison/BigStep.lean`
-  still contains `rand`/`frand` in an `IO`-based big-step evaluator.
+  was used as an `IO`-based big-step evaluator reference.
 - Live `bc --version`: GNU bc 1.07.1.
 
 ### Deliverables
@@ -426,31 +419,26 @@ compare outputs against the GNU `bc` command.
 - Total, fuel-bounded mutually recursive semantic functions; no `partial`,
   `sorry`, or axioms in `Bc/Eval.lean`.
 - Runtime state for globals, stacked function frames, autos, arrays, function
-  definitions, `ibase`, `obase`, `scale`, `last`, `history`, input, output, and
-  halt state.
+  definitions, `ibase`, `obase`, `scale`, output, and stop state.
 - Executable decimal number model with bc-style scale rules for addition,
   subtraction, multiplication, division, modulo, exponentiation, square root,
   input-base parsing, output-base rendering, and 70-column output wrapping.
-- Statements and control flow: expression printing rules, strings, `print`,
-  blocks, `if`, `while`, `for`, `break`, `continue`, `return`, `quit`, `halt`,
-  `limits`, and `warranty`.
+- Statements and control flow: expression output rules, strings, blocks, `if`,
+  `while`, `for`, `break`, `return`, and `quit`.
 - Functions: dynamic definitions, parameters, autos, recursion, call-by-value
-  scalar/array parameters, and GNU extension call-by-variable arrays (`*a[]` /
-  `&a[]`).
-- Builtins: `length`, `scale`, `sqrt`, `read`, and `random`, with the evaluator
-  running in `IO` for effectful operations.
+  scalar and array parameters.
+- Builtins: `length`, `scale`, and `sqrt`.
 - `-l` / `--mathlib` CLI mode preloads `bc-1.07.1/bc/libmath.b`, matching the
   reference tests that depend on `s`, `c`, `a`, `l`, `e`, and `j`.
 
 ### Tests
 
-`scripts/run_eval_tests.sh` discovers checked-in GNU bc corpus files, builds the
+`scripts/run_eval_tests.sh` discovers checked-in POSIX corpus files, builds the
 interpreter once when needed, runs the compiled `bc-lean` executable, runs the
 same file through GNU `bc`, and diffs stdout. The harness runs tests in
 parallel by default, supports `-j` / `--jobs` to cap concurrency, and reports
 progress as each worker finishes (`[done/total]`). Math-library fixtures are
-run with `-l` on both sides. Interactive or nondeterministic programs using
-`read()`/`random()` are skipped by default.
+run with `-l` on both sides.
 
 `make test` now runs both:
 
@@ -465,26 +453,21 @@ lake build
 
 make eval-test
 # Eval Test Summary:
-# Passed: 21
+# Passed: 37
 # Failed: 0
-# Skipped: 1
+# Skipped: 0
 
 make test
 # AST Test Summary:
-# Passed: 23
+# Passed: 38
 # Failed: 0
 # Skipped: 0
 #
 # Eval Test Summary:
-# Passed: 21
+# Passed: 37
 # Failed: 0
-# Skipped: 1
+# Skipped: 0
 ```
-
-The skipped eval fixture is `tests/Examples/ckbook.b`, which is intentionally
-interactive and calls `read()`. The interpreter implements `read()` through
-standard input, but the automated comparison harness avoids blocking on
-interactive examples.
 
 ### Notes and limitations
 

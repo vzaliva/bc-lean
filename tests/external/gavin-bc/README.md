@@ -13,8 +13,8 @@ was found during import.
 
 Only a curated POSIX-compatible subset is imported here. Candidates were
 screened with GNU bc standard compile mode and then compared against GNU bc as
-the runtime oracle. Tests that depend on Gavin-specific extensions, extra
-libraries, random behavior, or unsupported diagnostics are intentionally omitted.
+the runtime oracle. Tests outside this subset or requiring unavailable auxiliary
+libraries are intentionally omitted.
 
 Files ending in `.mathlib` are empty harness markers. They tell
 `scripts/run_eval_tests.sh` to run the corresponding `.b` file with `-l` for

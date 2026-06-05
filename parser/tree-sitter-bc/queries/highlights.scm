@@ -1,4 +1,4 @@
-; highlights.scm for GNU bc
+; highlights.scm for POSIX bc
 
 (comment) @comment
 (string) @string
@@ -6,14 +6,12 @@
 (identifier) @identifier
 
 [
-  "define" "auto" "if" "else" "while" "for" "break" "continue" "return"
-  "quit" "halt" "print" "warranty" "limits" "void" "read" "random"
-  "length" "sqrt" "scale" "ibase" "obase" "last" "history"
+  "define" "auto" "if" "while" "for" "break" "return"
+  "quit" "length" "sqrt" "scale" "ibase" "obase"
 ] @keyword
 
 [
   "+" "-" "*" "/" "%" "^"
-  "&&" "||" "!"
   "==" "!=" "<=" ">=" "<" ">"
   "=" "+=" "-=" "*=" "/=" "%=" "^="
   "++" "--"

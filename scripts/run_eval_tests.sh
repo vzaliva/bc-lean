@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Compare bc-lean's definitional interpreter against GNU bc for the checked-in
-# reference programs.  Files that require interactive/nondeterministic input are
-# skipped by default.
+# POSIX reference programs.
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -94,41 +93,13 @@ needs_mathlib() {
 
   case "$1" in
     tests/Test/atan.b|tests/Test/checklib.b|tests/Test/exp.b|tests/Test/jn.b|\
-    tests/Test/ln.b|tests/Test/sine.b|tests/Examples/pi.b)
+    tests/Test/ln.b|tests/Test/sine.b)
       return 0
       ;;
     *)
       return 1
       ;;
   esac
-}
-
-input_file_for() {
-  local src="$1"
-  local stem="${src%.*}"
-  if [[ -f "$src.stdin" ]]; then
-    printf '%s\n' "$src.stdin"
-    return 0
-  fi
-  if [[ -f "$stem.stdin" ]]; then
-    printf '%s\n' "$stem.stdin"
-    return 0
-  fi
-  return 1
-}
-
-should_skip() {
-  local src="$1"
-  if rg -q 'random[[:space:]]*\(' "$src"; then
-    return 0
-  fi
-  if rg -q 'read[[:space:]]*\(' "$src"; then
-    if ! input_file_for "$src" >/dev/null; then
-      return 0
-    fi
-  fi
-
-  return 1
 }
 
 print_report() {
@@ -149,7 +120,7 @@ print_report() {
 
 run_single_test() {
   local src="$1"
-  local result_base lean_out ref_out lean_err ref_err report status stdin_file
+  local result_base lean_out ref_out lean_err ref_err report status
   local lean_code ref_code math_args=()
 
   result_base="${src#tests/}"
@@ -161,38 +132,18 @@ run_single_test() {
   report="$TEMP_DIR/$result_base.report"
   status="$TEMP_DIR/$result_base.status"
 
-  if should_skip "$src"; then
-    echo "Skipped: $src (interactive or nondeterministic builtin)" >"$report"
-    echo "skip" >"$status"
-    print_report "$report"
-    return 0
-  fi
-
   if needs_mathlib "$src"; then
     math_args=(-l)
   fi
 
-  if stdin_file=$(input_file_for "$src"); then
-    "$BC_LEAN_EXE" --fuel "$FUEL" "${math_args[@]}" "$src" \
-      <"$stdin_file" >"$lean_out" 2>"$lean_err"
-  else
-    "$BC_LEAN_EXE" --fuel "$FUEL" "${math_args[@]}" "$src" \
-      </dev/null >"$lean_out" 2>"$lean_err"
-  fi
+  "$BC_LEAN_EXE" --fuel "$FUEL" "${math_args[@]}" "$src" \
+    </dev/null >"$lean_out" 2>"$lean_err"
   lean_code=$?
 
-  if stdin_file=$(input_file_for "$src"); then
-    if needs_mathlib "$src"; then
-      bc -l "$src" <"$stdin_file" >"$ref_out" 2>"$ref_err"
-    else
-      bc "$src" <"$stdin_file" >"$ref_out" 2>"$ref_err"
-    fi
+  if needs_mathlib "$src"; then
+    bc -l "$src" </dev/null >"$ref_out" 2>"$ref_err"
   else
-    if needs_mathlib "$src"; then
-      bc -l "$src" </dev/null >"$ref_out" 2>"$ref_err"
-    else
-      bc "$src" </dev/null >"$ref_out" 2>"$ref_err"
-    fi
+    bc "$src" </dev/null >"$ref_out" 2>"$ref_err"
   fi
   ref_code=$?
 

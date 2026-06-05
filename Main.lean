@@ -43,7 +43,7 @@ private def runFiles (opts : CliOptions) : IO UInt32 := do
   if opts.files.isEmpty then
     IO.eprintln usage
     return 1
-  let mut st := initialState ""
+  let mut st := initialState
   if opts.mathlib then
     match ← preloadMathlib opts.fuel st with
     | .success st' => st := st'

@@ -182,16 +182,13 @@ private def parseSpecialVar (s : String) : Except String SpecialVar :=
   | "ibase" => .ok .ibase
   | "obase" => .ok .obase
   | "scale" => .ok .scale
-  | "last" => .ok .last
-  | "history" => .ok .history
-  | "." => .ok .dot
   | v => .error s!"unknown special variable: {v}"
 
 private def contentOf (e : Element) : Array Content :=
   match e with | .Element _ _ c => c
 
 private def knownBuiltinNames : List String :=
-  ["length", "sqrt", "scale", "read", "random"]
+  ["length", "sqrt", "scale"]
 
 private def builtinNameFrom (x : Element) : Except String String := do
   let raw := textOf (contentOf x)
@@ -204,8 +201,6 @@ private def parseBuiltinName (s : String) : Except String Builtin :=
   | "length" => .ok .length
   | "sqrt" => .ok .sqrt
   | "scale" => .ok .scale
-  | "read" => .ok .read
-  | "random" => .ok .random
   | v => .error s!"unknown builtin: {v}"
 
 private def headCharToken (x : Element) : Except String String :=
@@ -268,7 +263,7 @@ mutual
     | some e =>
         match e with
         | .Element "assignment_expression" _ _ => xmlToAssign e
-        | .Element "logical_or_expression" _ _ => xmlToOr e
+        | .Element "relational_expression" _ _ => xmlToRel e
         | .Element name _ _ => throw s!"unexpected expression form: {name}"
 
   private partial def xmlToAssign (x : Element) : Except String Expr := do
@@ -280,28 +275,6 @@ mutual
     let rhsEl ← singleElement "expression" x
     let rhs ← xmlToExpression rhsEl
     return .assign lhs op rhs
-
-  private partial def xmlToOr (x : Element) : Except String Expr := do
-    let firstEl ← singleElement "logical_and_expression" x
-    let first ← xmlToAnd firstEl
-    let ops := charTokens x |>.filter (· == "||")
-    let rhss ← mapMToList (fieldsNamed x "right") xmlToAnd
-    foldChained (fun _ => pure LogicOp.or) (fun _ l r => Expr.logic .or l r) first ops rhss
-
-  private partial def xmlToAnd (x : Element) : Except String Expr := do
-    let firstEl ← singleElement "logical_not_expression" x
-    let first ← xmlToNot firstEl
-    let ops := charTokens x |>.filter (· == "&&")
-    let rhss ← mapMToList (fieldsNamed x "right") xmlToNot
-    foldChained (fun _ => pure LogicOp.and) (fun _ l r => Expr.logic .and l r) first ops rhss
-
-  private partial def xmlToNot (x : Element) : Except String Expr := do
-    if charTokens x |>.contains "!" then do
-      let rel ← singleElement "relational_expression" x
-      let inner ← xmlToRel rel
-      return .unary .not inner
-    else
-      singleElement "relational_expression" x >>= xmlToRel
 
   private partial def xmlToRel (x : Element) : Except String Expr := do
     let firstEl ← singleElement "additive_expression" x
@@ -461,7 +434,6 @@ mutual
     | "while_statement" => xmlToWhile src inner
     | "for_statement" => xmlToFor src inner
     | "break_statement" => return .break
-    | "continue_statement" => return .continue
     | "return_statement" => do
         match ← optionalElement "expression" inner with
         | none => return .return none
@@ -469,13 +441,6 @@ mutual
             let e ← xmlToExpression eEl
             return .return (some e)
     | "quit_statement" => return .quit
-    | "halt_statement" => return .halt
-    | "print_statement" => do
-        let pl ← singleElement "print_list" inner
-        let items ← mapMToList (childElements pl) (xmlToPrintItem src)
-        return .print items
-    | "warranty_statement" => return .warranty
-    | "limits_statement" => return .limits
     | "block_statement" => do
         let body ← xmlToBody src inner
         return .block body
@@ -486,13 +451,7 @@ mutual
     let cond ← xmlToExpression condEl
     let thenEl ← singleElement "statement" x
     let thenBranch ← xmlToStmt src thenEl
-    let elseBranch ← match ← optionalElement "else_clause" x with
-      | none => pure none
-      | some ec => do
-          let sEl ← singleElement "statement" ec
-          let s ← xmlToStmt src sEl
-          pure (some s)
-    return .if cond thenBranch elseBranch
+    return .if cond thenBranch
 
   private partial def xmlToWhile (src : Source) (x : Element) : Except String Stmt := do
     let condEl ← singleElement "expression" x
@@ -502,39 +461,28 @@ mutual
     return .while cond body
 
   private partial def xmlToFor (src : Source) (x : Element) : Except String Stmt := do
-    let init' ← match fieldAt x "init" with
-      | none => pure none
-      | some e => xmlToExpression e >>= fun v => pure (some v)
-    let cond' ← match fieldAt x "condition" with
-      | none => pure none
-      | some e => xmlToExpression e >>= fun v => pure (some v)
-    let upd' ← match fieldAt x "update" with
-      | none => pure none
-      | some e => xmlToExpression e >>= fun v => pure (some v)
+    let initEl ← match fieldAt x "init" with
+      | none => throw "missing for init expression"
+      | some e => pure e
+    let condEl ← match fieldAt x "condition" with
+      | none => throw "missing for condition expression"
+      | some e => pure e
+    let updEl ← match fieldAt x "update" with
+      | none => throw "missing for update expression"
+      | some e => pure e
+    let init' ← xmlToExpression initEl
+    let cond' ← xmlToExpression condEl
+    let upd' ← xmlToExpression updEl
     let bodyEl ← singleElement "statement" x
     let body ← xmlToStmt src bodyEl
     return .for init' cond' upd' body
 
-  private partial def xmlToPrintItem (src : Source) (x : Element) : Except String PrintItem := do
-    let _ ← expectTag "print_element" x
-    let el ← firstChild x
-    match elementName el with
-    | "string" => return .str (← stringValueFromSource src el)
-    | "expression" =>
-        let e ← xmlToExpression el
-        return .expr e
-    | _ => throw "invalid print_element"
-
   private partial def xmlToDefineItem (x : Element) : Except String ParamDecl := do
     let _ ← expectTag "define_item" x
-    let toks := charTokens x
     let nameEl ← singleElement "identifier" x
     let name := trimText (textOf (contentOf nameEl))
-    if toks.contains "*" then
-      return .varArray name
-    else if toks.contains "&" then
-      return .refArray name
-    else if toks.contains "[" || (textOf (contentOf x)).contains "[" then
+    let hasBracket := (charTokens x).contains "[" || (textOf (contentOf x)).contains "["
+    if hasBracket then
       return .array name
     else
       return .scalar name
@@ -568,7 +516,7 @@ mutual
                     items := items ++ [.stmts pending]
                     pending := []
                   items := items ++ [.newline]
-              | "block_comment" | "line_comment" => pure ()
+              | "block_comment" => pure ()
               | _ => pure ()
           | _ => pure ()
     if !pending.isEmpty then
@@ -577,7 +525,6 @@ mutual
 
   private partial def xmlToFunDef (src : Source) (x : Element) : Except String FunDef := do
     let _ ← expectTag "function_definition" x
-    let void := (leadingTextBeforeField "name" x).contains "void"
     let name ← match fieldAt x "name" with
       | some el =>
           if elementName el == "identifier" then
@@ -591,7 +538,7 @@ mutual
           let dl ← singleElement "define_list" pl
           xmlToDefineList dl
     let body ← xmlToBody src x
-    return { void, name, params, body }
+    return { name, params, body }
 
   private partial def xmlToStmtSeq (src : Source) (x : Element) : Except String (List Stmt) := do
     let _ ← expectTag "statement_sequence" x
@@ -623,7 +570,7 @@ private def xmlToProgram (src : Source) (root : Element) : Except String Program
         let ss ← xmlToStmtSeq src e
         if ss.isEmpty then pure () else items := items ++ [.stmts ss]
     | "newline" => pure ()
-    | "block_comment" | "line_comment" => pure ()
+    | "block_comment" => pure ()
     | name => throw s!"unexpected source_file child: {name}"
   return items
 

@@ -1,20 +1,20 @@
 /-
-  Surface syntax AST for GNU bc 1.07.1.
+  Surface syntax AST for the POSIX bc subset.
 -/
 
 namespace Bc
 
-/-- Project version string for the bc dialect being modelled. -/
+/-- Reference implementation version used for comparison runs. -/
 def targetVersion : String := "1.07.1"
 
 abbrev Name := String
 
 inductive SpecialVar where
-  | ibase | obase | scale | last | history | dot
+  | ibase | obase | scale
   deriving Repr, BEq, DecidableEq
 
 inductive Builtin where
-  | length | sqrt | scale | read | random
+  | length | sqrt | scale
   deriving Repr, BEq, DecidableEq
 
 inductive RelOp where
@@ -25,16 +25,12 @@ inductive BinOp where
   | add | sub | mul | div | mod | pow
   deriving Repr, BEq, DecidableEq
 
-inductive LogicOp where
-  | and | or
-  deriving Repr, BEq, DecidableEq
-
 inductive AssignOp where
   | assign | addAssign | subAssign | mulAssign | divAssign | modAssign | powAssign
   deriving Repr, BEq, DecidableEq
 
 inductive UnOp where
-  | neg | not | preIncr | preDecr | postIncr | postDecr
+  | neg | preIncr | preDecr | postIncr | postDecr
   deriving Repr, BEq, DecidableEq
 
 mutual
@@ -52,7 +48,6 @@ inductive Expr where
   | assign (lhs : LVal) (op : AssignOp) (rhs : Expr)
   | rel (first : Expr) (rest : List (RelOp × Expr))
   | bin (op : BinOp) (lhs : Expr) (rhs : Expr)
-  | logic (op : LogicOp) (lhs : Expr) (rhs : Expr)
   | unary (op : UnOp) (arg : Expr)
   | call (name : Name) (args : List Arg)
   | builtin (fn : Builtin) (arg : Option Expr)
@@ -68,8 +63,6 @@ end
 inductive ParamDecl where
   | scalar (name : Name)
   | array (name : Name)
-  | refArray (name : Name)
-  | varArray (name : Name)
   deriving Repr, BEq, DecidableEq
 
 mutual
@@ -77,23 +70,13 @@ inductive Stmt where
   | expr (e : Expr)
   | str (value : String)
   | auto (params : List ParamDecl)
-  | if (cond : Expr) (thenBranch : Stmt) (elseBranch : Option Stmt)
+  | if (cond : Expr) (thenBranch : Stmt)
   | while (cond : Expr) (body : Stmt)
-  | for (init : Option Expr) (cond : Option Expr) (update : Option Expr) (body : Stmt)
+  | for (init : Expr) (cond : Expr) (update : Expr) (body : Stmt)
   | break
-  | continue
   | return (value : Option Expr)
   | quit
-  | halt
-  | print (items : List PrintItem)
-  | warranty
-  | limits
   | block (body : List BodyItem)
-  deriving Repr
-
-inductive PrintItem where
-  | expr (e : Expr)
-  | str (value : String)
   deriving Repr
 
 inductive BodyItem where
@@ -103,7 +86,6 @@ inductive BodyItem where
 end
 
 structure FunDef where
-  void : Bool
   name : Name
   params : List ParamDecl
   body : List BodyItem

@@ -39,23 +39,23 @@ define t (x, y, d, s, t)
 if (b == 0) {b = 10;  l = 61;  i = 10}
 "\nChecking e(x)"
 define f (x)
-{, return (e(x)), }
+{, return e(x), }
 for (s = 10; s < l; s = s + i) {, "\nscale = ";  s, , j = t(0, 200, 1, s, s + 4), }
 "\nChecking l(x)"
 define f (x)
-{, return (l(x)), }
+{, return l(x), }
 for (s = 10; s < l; s = s + i) {, "\nscale = ";  s, , j = t(1, 10000, 25, s, s + 4), }
 "\nChecking s(x)"
 define f (x)
-{, return (s(x)), }
+{, return s(x), }
 for (s = 10; s < l; s = s + i) {, "\nscale = ";  s, , j = t(0, 8 * a(1), .01, s, s + 4), }
 "\nChecking a(x)"
 define f (x)
-{, return (a(x)), }
+{, return a(x), }
 for (s = 10; s < l; s = s + i) {, "\nscale = ";  s, , j = t(-1000, 1000, 10, s, s + 4), }
 "\nChecking j(n,x)"
 define f (x)
-{, return (j(n, x)), }
+{, return j(n, x), }
 for (s = 10; s < l; s = s + i) {,
  "\nn=0, scale = "; 
  s,

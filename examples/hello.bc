@@ -1,2 +1,2 @@
-/* A minimal bc program: arithmetic and a print. */
+/* A minimal POSIX bc program: arithmetic expression output. */
 2 + 2

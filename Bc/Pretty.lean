@@ -17,16 +17,11 @@ private def ppSpecialVar : SpecialVar → Format
   | .ibase => "ibase"
   | .obase => "obase"
   | .scale => "scale"
-  | .last => "last"
-  | .history => "history"
-  | .dot => "."
 
 private def ppBuiltin : Builtin → Format
   | .length => "length"
   | .sqrt => "sqrt"
   | .scale => "scale"
-  | .read => "read"
-  | .random => "random"
 
 private def ppRelOp : RelOp → Format
   | .eq => "=="
@@ -44,10 +39,6 @@ private def ppBinOp : BinOp → Format
   | .mod => "%"
   | .pow => "^"
 
-private def ppLogicOp : LogicOp → Format
-  | .and => "&&"
-  | .or => "||"
-
 private def ppAssignOp : AssignOp → Format
   | .assign => "="
   | .addAssign => "+="
@@ -59,7 +50,6 @@ private def ppAssignOp : AssignOp → Format
 
 private def ppUnOp : UnOp → Format
   | .neg => "-"
-  | .not => "!"
   | .preIncr => "++"
   | .preDecr => "--"
   | .postIncr => "++"
@@ -84,8 +74,6 @@ mutual
       chain
   | .bin op lhs rhs =>
       ppExpr lhs ++ Format.text " " ++ ppBinOp op ++ Format.text " " ++ ppExpr rhs
-  | .logic op lhs rhs =>
-      ppExpr lhs ++ Format.text " " ++ ppLogicOp op ++ Format.text " " ++ ppExpr rhs
   | .unary op arg =>
       match op with
       | .postIncr => ppExpr arg ++ Format.text "++"
@@ -108,12 +96,6 @@ end
 private def ppParamDecl : ParamDecl → Format
   | .scalar n => Format.text n
   | .array n => Format.text n ++ Format.text "[]"
-  | .refArray n => Format.text "&" ++ Format.text n ++ Format.text "[]"
-  | .varArray n => Format.text "*" ++ Format.text n ++ Format.text "[]"
-
-private def ppPrintItem : PrintItem → Format
-  | .expr e => ppExpr e
-  | .str s => Format.text (String.quote s)
 
 mutual
 partial def ppBodyItem : BodyItem → Format
@@ -124,32 +106,22 @@ partial def ppStmt : Stmt → Format
   | .expr e => ppExpr e
   | .str s => Format.text (String.quote s)
   | .auto ps => Format.text "auto " ++ bracket "" "" (ps.map ppParamDecl)
-  | .if cond t e =>
-      Format.text "if (" ++ ppExpr cond ++ Format.text ") " ++ ppStmt t ++
-        match e with
-        | none => Format.nil
-        | some s => Format.text " else " ++ ppStmt s
+  | .if cond t =>
+      Format.text "if (" ++ ppExpr cond ++ Format.text ") " ++ ppStmt t
   | .while cond body =>
       Format.text "while (" ++ ppExpr cond ++ Format.text ") " ++ ppStmt body
   | .for init cond upd body =>
-      let ppOpt e := match e with | none => Format.nil | some x => ppExpr x
-      Format.text "for (" ++ ppOpt init ++ Format.text "; " ++ ppOpt cond ++
-        Format.text "; " ++ ppOpt upd ++ Format.text ") " ++ ppStmt body
+      Format.text "for (" ++ ppExpr init ++ Format.text "; " ++ ppExpr cond ++
+        Format.text "; " ++ ppExpr upd ++ Format.text ") " ++ ppStmt body
   | .break => "break"
-  | .continue => "continue"
   | .return none => "return"
   | .return (some e) => Format.text "return " ++ ppExpr e
   | .quit => "quit"
-  | .halt => "halt"
-  | .print items => Format.text "print " ++ bracket "" "" (items.map ppPrintItem)
-  | .warranty => "warranty"
-  | .limits => "limits"
   | .block body => bracket "{" "}" (body.map ppBodyItem)
 end
 
 partial def ppFunDef (defn : FunDef) : Format :=
-  let head := if defn.void then "define void " else "define "
-  head ++ Format.text defn.name ++ Format.text " " ++
+  Format.text "define " ++ Format.text defn.name ++ Format.text " " ++
     bracket "(" ")" (defn.params.map ppParamDecl) ++ Format.line ++
     bracket "{" "}" (defn.body.map ppBodyItem)
 

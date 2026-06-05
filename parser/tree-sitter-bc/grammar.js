@@ -14,7 +14,6 @@ module.exports = grammar({
   extras: $ => [
     /[ \t\r\f]+/,
     $.block_comment,
-    $.line_comment,
     $.line_continuation,
   ],
 
@@ -34,12 +33,10 @@ module.exports = grammar({
 
     function_definition: $ => seq(
       "define",
-      optional("void"),
       field("name", $.identifier),
       "(",
       optional($.parameter_list),
       ")",
-      optional($.newline),
       "{",
       repeat($._body_item),
       optional($.statement_sequence),
@@ -61,8 +58,6 @@ module.exports = grammar({
     define_item: $ => choice(
       field("name", $.identifier),
       seq(field("name", $.identifier), "[", "]"),
-      seq("*", field("name", $.identifier), "[", "]"),
-      seq("&", field("name", $.identifier), "[", "]"),
     ),
 
     statement: $ => choice(
@@ -73,13 +68,8 @@ module.exports = grammar({
       $.while_statement,
       $.for_statement,
       $.break_statement,
-      $.continue_statement,
       $.return_statement,
       $.quit_statement,
-      $.halt_statement,
-      $.print_statement,
-      $.warranty_statement,
-      $.limits_statement,
       $.block_statement,
     ),
 
@@ -99,14 +89,7 @@ module.exports = grammar({
       ")",
       optional($.newline),
       field("consequence", $.statement),
-      optional(field("alternative", $.else_clause)),
     )),
-
-    else_clause: $ => seq(
-      "else",
-      optional($.newline),
-      $.statement,
-    ),
 
     while_statement: $ => seq(
       "while",
@@ -120,39 +103,23 @@ module.exports = grammar({
     for_statement: $ => seq(
       "for",
       "(",
-      field("init", optional($.expression)),
+      field("init", $.expression),
       ";",
-      field("condition", optional($.expression)),
+      field("condition", $.expression),
       ";",
-      field("update", optional($.expression)),
+      field("update", $.expression),
       ")",
       optional($.newline),
       field("body", $.statement),
     ),
 
     break_statement: $ => "break",
-    continue_statement: $ => "continue",
     quit_statement: $ => "quit",
-    halt_statement: $ => "halt",
-    warranty_statement: $ => "warranty",
-    limits_statement: $ => "limits",
 
     return_statement: $ => prec.left(seq(
       "return",
-      optional($.expression),
+      optional(seq("(", field("value", $.expression), ")")),
     )),
-
-    print_statement: $ => seq(
-      "print",
-      $.print_list,
-    ),
-
-    print_list: $ => seq(
-      $.print_element,
-      repeat(seq(",", $.print_element)),
-    ),
-
-    print_element: $ => choice($.string, $.expression),
 
     block_statement: $ => seq(
       "{",
@@ -163,7 +130,7 @@ module.exports = grammar({
 
     expression: $ => choice(
       $.assignment_expression,
-      $.logical_or_expression,
+      $.relational_expression,
     ),
 
     assignment_expression: $ => prec.right(1, seq(
@@ -174,27 +141,6 @@ module.exports = grammar({
 
     assign_op: $ => choice(
       "=", "+=", "-=", "*=", "/=", "%=", "^=",
-    ),
-
-    logical_or_expression: $ => prec.left(2, seq(
-      $.logical_and_expression,
-      repeat(seq(
-        "||",
-        field("right", $.logical_and_expression),
-      )),
-    )),
-
-    logical_and_expression: $ => prec.left(3, seq(
-      $.logical_not_expression,
-      repeat(seq(
-        "&&",
-        field("right", $.logical_not_expression),
-      )),
-    )),
-
-    logical_not_expression: $ => choice(
-      prec(4, seq("!", field("operand", $.relational_expression))),
-      $.relational_expression,
     ),
 
     relational_expression: $ => prec.left(5, seq(
@@ -272,9 +218,6 @@ module.exports = grammar({
       "ibase",
       "obase",
       "scale",
-      "last",
-      "history",
-      ".",
     )),
 
     function_call: $ => prec(2, seq(
@@ -298,8 +241,6 @@ module.exports = grammar({
       seq("length", "(", field("argument", $.expression), ")"),
       seq("sqrt", "(", field("argument", $.expression), ")"),
       seq("scale", "(", field("argument", $.expression), ")"),
-      seq("read", "(", ")"),
-      seq("random", "(", ")"),
     )),
 
     parenthesized_expression: $ => seq(
@@ -314,7 +255,7 @@ module.exports = grammar({
       $.special_variable,
     ),
 
-    identifier: $ => token(prec(-1, /[a-z][a-z0-9_]*/)),
+    identifier: $ => token(prec(-1, /[a-z]/)),
 
     number: $ => token(seq(
       choice(
@@ -328,11 +269,7 @@ module.exports = grammar({
 
     string: $ => seq(
       '"',
-      repeat(choice(
-        /[^"\\]/,
-        /\\./,
-        /\n/,
-      )),
+      repeat(/[^"]/),
       '"',
     ),
 
@@ -343,11 +280,6 @@ module.exports = grammar({
         /\*[^/]/,
       )),
       "*/",
-    )),
-
-    line_comment: $ => token(seq(
-      "#",
-      /[^\n]*/,
     )),
 
     line_continuation: $ => token(/\\\r?\n/),

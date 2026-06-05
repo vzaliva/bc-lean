@@ -4,7 +4,7 @@
    computed at two scales, scale s and then scale t, where t>s.
    the result from scale t is divided by 1 at scale s and the
    results are compared.  If they are different, the function is
-   said to have failed.  It will then print out the value of i
+   said to have failed.  It will then display the value of i
    (called index) and the two original values val1 (scale s) and
    val2 (scale t) */
 

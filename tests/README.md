@@ -1,13 +1,12 @@
-# bc reference test programs
+# POSIX bc reference test programs
 
-Copied from GNU bc 1.07.1 (`bc-1.07.1/Test/` and `bc-1.07.1/Examples/`).
-Same license as GNU bc (GPL-3.0-or-later).
+Copied from POSIX-compatible GNU bc 1.07.1 sources and imported third-party
+POSIX fixtures. GNU bc files use GPL-3.0-or-later, matching this project.
 
 ## Layout
 
-- `Test/` — regression scripts from the upstream tarball
-- `Examples/` — sample programs (pi digits, primes, etc.)
-- `eval/` — evaluator-only fixtures, including stdin sidecars
+- `Test/` — POSIX-compatible regression scripts from the upstream tarball
+- `eval/` — evaluator-focused POSIX fixtures
 - `external/` — third-party evaluator fixtures with their own license notices
 - `parse-invalid/` — deliberately malformed parser fixtures
 - `semantics/` — future context/semantic fixtures, not used by parser tests
@@ -21,10 +20,8 @@ Gavin Howard bc fixtures under `external/gavin-bc/` are BSD-2-Clause.
 
 ## Parser regression
 
-All upstream corpus `Test/` and `Examples/` `.b`/`.bc` files are parsed by
-`make parser-test` (tree-sitter). `tests/eval/`, `tests/external/`,
-`tests/parse-invalid/`, and `tests/semantics/` are excluded from that standalone
-parser acceptance target.
+All POSIX `.b`/`.bc` files under `tests/` are parsed by `make parser-test`
+(tree-sitter), except malformed parser fixtures and future semantic fixtures.
 
 **Excluded from parser regression** (not bc source):
 
@@ -37,7 +34,6 @@ Many `Test/` programs need libmath. To run with the system GNU bc:
 
 ```bash
 bc -s -c -l tests/Test/array.b
-bc -s -c -l tests/Examples/pi.b
 ```
 
 Use `bc -s -c` without `-l` when libmath is not required. Parser development only

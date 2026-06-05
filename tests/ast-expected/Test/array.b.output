@@ -1,4 +1,4 @@
-"\"\n          \""
+"This tests arrays!\n"
 define p (x, y)
 {, auto i, , for (i = x; i < y; i++) a[i], }
 for (i = 0; i < 10; i++) a[i] = i

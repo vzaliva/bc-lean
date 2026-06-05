@@ -12,7 +12,13 @@ if [[ ! -f "$CONFIG" ]]; then
 fi
 
 shopt -s globstar nullglob
-files=("$ROOT"/tests/**/*.b "$ROOT"/tests/**/*.bc)
+files=()
+for f in "$ROOT"/tests/**/*.b "$ROOT"/tests/**/*.bc; do
+  case "$f" in
+    "$ROOT"/tests/constraints/*) continue ;;
+  esac
+  files+=("$f")
+done
 
 if [[ ${#files[@]} -eq 0 ]]; then
   echo "error: no .b or .bc files under tests/" >&2

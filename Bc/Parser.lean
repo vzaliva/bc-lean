@@ -46,6 +46,17 @@ private def charTokens (x : Element) : List String :=
             if t.isEmpty then none else some t
         | _ => none
 
+private def leadingTextBeforeField (field : String) (x : Element) : String :=
+  match x with
+  | .Element _ _ content =>
+      let rec go : List Content → String → String
+        | [], acc => acc
+        | .Character s :: rest, acc => go rest (acc ++ " " ++ trimText s)
+        | .Element (.Element _ attrs _) :: rest, acc =>
+            if attrs.get? "field" == some field then acc else go rest acc
+        | _ :: rest, acc => go rest acc
+      go content.toList ""
+
 private def fieldsNamed (x : Element) (field : String) : Array Element :=
   childElements x |>.filter fun e =>
     match e with
@@ -60,6 +71,61 @@ private def mapMToList {α β} (xs : Array α) (f : α → Except String β) : E
 
 private def elementName (e : Element) : String :=
   match e with | .Element n _ _ => n
+
+private structure Source where
+  lines : Array String
+
+private def Source.ofString (s : String) : Source :=
+  { lines := (s.splitOn "\n").toArray }
+
+private def attrNat (key : String) (x : Element) : Except String Nat :=
+  match x with
+  | .Element name attrs _ =>
+      match attrs.get? key with
+      | none => throw s!"missing {key} attribute in {name}"
+      | some raw =>
+          match raw.toNat? with
+          | some n => pure n
+          | none => throw s!"invalid {key} attribute in {name}: {raw}"
+
+private def sourceLine (src : Source) (row : Nat) : Except String String :=
+  match src.lines[row]? with
+  | some line => pure line
+  | none => throw s!"source span row out of range: {row}"
+
+private def sliceLine (line : String) (startCol endCol : Nat) : String :=
+  ((line.drop startCol).take (endCol - startCol)).toString
+
+private def joinWithNewlines : List String → String
+  | [] => ""
+  | x :: xs => xs.foldl (fun acc line => acc ++ "\n" ++ line) x
+
+private def sourceSlice (src : Source) (x : Element) : Except String String := do
+  let srow ← attrNat "srow" x
+  let scol ← attrNat "scol" x
+  let erow ← attrNat "erow" x
+  let ecol ← attrNat "ecol" x
+  if srow == erow then
+    let line ← sourceLine src srow
+    return sliceLine line scol ecol
+  else
+    let firstLine ← sourceLine src srow
+    let lastLine ← sourceLine src erow
+    let mut parts : List String := [sliceLine firstLine scol firstLine.length]
+    for offset in List.range (erow - srow - 1) do
+      let line ← sourceLine src (srow + 1 + offset)
+      parts := parts ++ [line]
+    parts := parts ++ [sliceLine lastLine 0 ecol]
+    return joinWithNewlines parts
+
+private def stringLiteralBody (raw : String) : String :=
+  if raw.length >= 2 then
+    ((raw.drop 1).take (raw.length - 2)).toString
+  else
+    raw
+
+private def stringValueFromSource (src : Source) (x : Element) : Except String String := do
+  return stringLiteralBody (← sourceSlice src x)
 
 private def firstChild (x : Element) : Except String Element :=
   match (childElements x)[0]? with
@@ -158,6 +224,19 @@ private def foldChained (parseOp : String → Except String α) (mk : α → Exp
     acc := mk op acc rhs
   return acc
 
+private partial def foldChainedRight (parseOp : String → Except String α)
+    (mk : α → Expr → Expr → Expr) (first : Expr) (ops : List String) (rhss : List Expr) :
+    Except String Expr := do
+  if ops.length ≠ rhss.length then
+    throw s!"operator/operand count mismatch ({ops.length} vs {rhss.length})"
+  match ops, rhss with
+  | [], [] => return first
+  | opStr :: ops', rhs :: rhss' =>
+      let op ← parseOp opStr
+      let right ← foldChainedRight parseOp mk rhs ops' rhss'
+      return mk op first right
+  | _, _ => throw "operator/operand count mismatch"
+
 def runTreeSitterXml (file : String) : IO String := do
   let cwd ← IO.currentDir
   let configPath := cwd / "config.json"
@@ -251,7 +330,7 @@ mutual
     let first ← xmlToUnary firstEl
     let ops := charTokens x |>.filter (· == "^")
     let rhss ← mapMToList (fieldsNamed x "right") xmlToUnary
-    foldChained parseBinOp (fun op l r => Expr.bin op l r) first ops rhss
+    foldChainedRight parseBinOp (fun op l r => Expr.bin op l r) first ops rhss
 
   partial def xmlToUnary (x : Element) : Except String Expr := do
     let toks := charTokens x
@@ -363,7 +442,7 @@ mutual
         return .array name idx
     | _ => throw "invalid named_expression"
 
-  partial def xmlToStmt (x : Element) : Except String Stmt := do
+  partial def xmlToStmt (src : Source) (x : Element) : Except String Stmt := do
     let _ ← expectTag "statement" x
     let inner ← firstChild x
     match elementName inner with
@@ -373,14 +452,14 @@ mutual
         return .expr e
     | "string_statement" => do
         let sEl ← singleElement "string" inner
-        return .str (textOf (contentOf sEl))
+        return .str (← stringValueFromSource src sEl)
     | "auto_statement" => do
         let dl ← singleElement "define_list" inner
         let ps ← xmlToDefineList dl
         return .auto ps
-    | "if_statement" => xmlToIf inner
-    | "while_statement" => xmlToWhile inner
-    | "for_statement" => xmlToFor inner
+    | "if_statement" => xmlToIf src inner
+    | "while_statement" => xmlToWhile src inner
+    | "for_statement" => xmlToFor src inner
     | "break_statement" => return .break
     | "continue_statement" => return .continue
     | "return_statement" => do
@@ -393,36 +472,36 @@ mutual
     | "halt_statement" => return .halt
     | "print_statement" => do
         let pl ← singleElement "print_list" inner
-        let items ← mapMToList (childElements pl) xmlToPrintItem
+        let items ← mapMToList (childElements pl) (xmlToPrintItem src)
         return .print items
     | "warranty_statement" => return .warranty
     | "limits_statement" => return .limits
     | "block_statement" => do
-        let body ← xmlToBody inner
+        let body ← xmlToBody src inner
         return .block body
     | name => throw s!"unexpected statement: {name}"
 
-  partial def xmlToIf (x : Element) : Except String Stmt := do
+  partial def xmlToIf (src : Source) (x : Element) : Except String Stmt := do
     let condEl ← singleElement "expression" x
     let cond ← xmlToExpression condEl
     let thenEl ← singleElement "statement" x
-    let thenBranch ← xmlToStmt thenEl
+    let thenBranch ← xmlToStmt src thenEl
     let elseBranch ← match ← optionalElement "else_clause" x with
       | none => pure none
       | some ec => do
           let sEl ← singleElement "statement" ec
-          let s ← xmlToStmt sEl
+          let s ← xmlToStmt src sEl
           pure (some s)
     return .if cond thenBranch elseBranch
 
-  partial def xmlToWhile (x : Element) : Except String Stmt := do
+  partial def xmlToWhile (src : Source) (x : Element) : Except String Stmt := do
     let condEl ← singleElement "expression" x
     let cond ← xmlToExpression condEl
     let bodyEl ← singleElement "statement" x
-    let body ← xmlToStmt bodyEl
+    let body ← xmlToStmt src bodyEl
     return .while cond body
 
-  partial def xmlToFor (x : Element) : Except String Stmt := do
+  partial def xmlToFor (src : Source) (x : Element) : Except String Stmt := do
     let init' ← match fieldAt x "init" with
       | none => pure none
       | some e => xmlToExpression e >>= fun v => pure (some v)
@@ -433,14 +512,14 @@ mutual
       | none => pure none
       | some e => xmlToExpression e >>= fun v => pure (some v)
     let bodyEl ← singleElement "statement" x
-    let body ← xmlToStmt bodyEl
+    let body ← xmlToStmt src bodyEl
     return .for init' cond' upd' body
 
-  partial def xmlToPrintItem (x : Element) : Except String PrintItem := do
+  partial def xmlToPrintItem (src : Source) (x : Element) : Except String PrintItem := do
     let _ ← expectTag "print_element" x
     let el ← firstChild x
     match elementName el with
-    | "string" => return .str (textOf (contentOf el))
+    | "string" => return .str (← stringValueFromSource src el)
     | "expression" =>
         let e ← xmlToExpression el
         return .expr e
@@ -470,7 +549,7 @@ mutual
       else pure ()
     return acc
 
-  partial def xmlToBody (x : Element) : Except String (List BodyItem) := do
+  partial def xmlToBody (src : Source) (x : Element) : Except String (List BodyItem) := do
     let mut items : List BodyItem := []
     let mut pending : List Stmt := []
     match x with
@@ -481,7 +560,7 @@ mutual
               match elementName e with
               | "statement_sequence" => do
                   let stmts ← mapMToList (childElements e) fun sEl =>
-                    if elementName sEl == "statement" then xmlToStmt sEl
+                    if elementName sEl == "statement" then xmlToStmt src sEl
                     else throw "expected statement"
                   pending := pending ++ stmts
               | "newline" => do
@@ -496,9 +575,9 @@ mutual
       items := items ++ [.stmts pending]
     return items
 
-  partial def xmlToFunDef (x : Element) : Except String FunDef := do
+  partial def xmlToFunDef (src : Source) (x : Element) : Except String FunDef := do
     let _ ← expectTag "function_definition" x
-    let void := charTokens x |>.contains "void"
+    let void := (leadingTextBeforeField "name" x).contains "void"
     let name ← match fieldAt x "name" with
       | some el =>
           if elementName el == "identifier" then
@@ -511,37 +590,37 @@ mutual
       | some pl => do
           let dl ← singleElement "define_list" pl
           xmlToDefineList dl
-    let body ← xmlToBody x
+    let body ← xmlToBody src x
     return { void, name, params, body }
 
-  partial def xmlToStmtSeq (x : Element) : Except String (List Stmt) := do
+  partial def xmlToStmtSeq (src : Source) (x : Element) : Except String (List Stmt) := do
     let _ ← expectTag "statement_sequence" x
     mapMToList (childElements x) fun e =>
-      if elementName e == "statement" then xmlToStmt e
+      if elementName e == "statement" then xmlToStmt src e
       else throw "expected statement in sequence"
 
-  partial def xmlToTopItem (x : Element) : Except String TopItem := do
+  partial def xmlToTopItem (src : Source) (x : Element) : Except String TopItem := do
     match elementName x with
     | "function_definition" =>
-        let d ← xmlToFunDef x
+        let d ← xmlToFunDef src x
         return .funDef d
     | "statement_sequence" => do
-        let ss ← xmlToStmtSeq x
+        let ss ← xmlToStmtSeq src x
         return .stmts ss
     | name => throw s!"unexpected top-level item: {name}"
 
 end
 
-def xmlToProgram (root : Element) : Except String Program := do
+def xmlToProgram (src : Source) (root : Element) : Except String Program := do
   let root ← expectTag "source_file" root
   let mut items : List TopItem := []
   for e in childElements root do
     match elementName e with
     | "function_definition" =>
-        let d ← xmlToFunDef e
+        let d ← xmlToFunDef src e
         items := items ++ [.funDef d]
     | "statement_sequence" =>
-        let ss ← xmlToStmtSeq e
+        let ss ← xmlToStmtSeq src e
         if ss.isEmpty then pure () else items := items ++ [.stmts ss]
     | "newline" => pure ()
     | "block_comment" | "line_comment" => pure ()
@@ -549,6 +628,7 @@ def xmlToProgram (root : Element) : Except String Program := do
   return items
 
 def parseBcFile (path : String) : IO Program := do
+  let source ← IO.FS.readFile path
   let xmlStr ← runTreeSitterXml path
   match assertCleanXml xmlStr with
   | .error e => throw <| IO.userError e
@@ -556,7 +636,7 @@ def parseBcFile (path : String) : IO Program := do
       match parse xmlStr with
       | .error e => throw <| IO.userError s!"XML parse error in {path}: {e}"
       | .ok root =>
-          match xmlToProgram root with
+          match xmlToProgram (Source.ofString source) root with
           | .error e => throw <| IO.userError s!"AST conversion error in {path}: {e}"
           | .ok prog =>
               match Constraints.checkProgram path prog with

@@ -8,42 +8,29 @@ namespace Bc
 
 structure CheckCtx where
   inFunction : Bool := false
+  inVoidFunction : Bool := false
+  loopDepth : Nat := 0
   deriving Repr, BEq
 
 namespace CheckCtx
 
-def inFun (ctx : CheckCtx) : CheckCtx := { ctx with inFunction := true }
+def inFun (ctx : CheckCtx) (isVoid : Bool) : CheckCtx :=
+  { ctx with inFunction := true, inVoidFunction := isVoid }
+
+def inLoop (ctx : CheckCtx) : CheckCtx :=
+  { ctx with loopDepth := ctx.loopDepth + 1 }
 
 end CheckCtx
 
 namespace Constraints
 
-private def checkComparison (msg : String) (i : ExprInfo) : Except String Unit :=
-  if i.hasComparison then .error msg else .ok ()
-
-private def checkAssignRhs (i : ExprInfo) : Except String Unit :=
-  if i.topIsAssign then .error "comparison in assignment" else .ok ()
-
-private def checkReturnExpr (i : ExprInfo) : Except String Unit := do
-  if i.hasComparison then
-    throw "comparison in return expresion"
-  if !i.inParens then
-    throw "return expression requires parenthesis"
+private def checkReturnValue (ctx : CheckCtx) : Except String Unit :=
+  if ctx.inVoidFunction then
+    throw "Return expression in a void function."
+  else
+    pure ()
 
 partial def checkExpr (ctx : CheckCtx) (_loc : String) (e : Expr) : Except String Unit := do
-  match e with
-  | .arrayAccess _ idx => checkComparison "comparison in subscript" (Expr.info idx)
-  | .assign _ _ rhs => checkAssignRhs (Expr.info rhs)
-  | .call _ args =>
-      for a in args do
-        match a with
-        | .expr arg => checkComparison "comparison in argument" (Expr.info arg)
-        | .arrayRef _ => pure ()
-  | .builtin _ arg =>
-      match arg with
-      | none => pure ()
-      | some e => checkComparison "comparison in argument" (Expr.info e)
-  | _ => pure ()
   for sub in e.children do
     checkExpr ctx "" sub
 
@@ -68,25 +55,31 @@ partial def checkStmt (ctx : CheckCtx) (s : Stmt) : Except String Unit := do
       match e with | none => pure () | some s' => checkStmt ctx s'
   | .while cond body =>
       checkExpr ctx "" cond
-      checkStmt ctx body
+      checkStmt (CheckCtx.inLoop ctx) body
   | .for init cond upd body => do
       match init with
       | none => pure ()
-      | some e => checkComparison "Comparison in first for expression" (Expr.info e)
+      | some e => checkExpr ctx "" e
       match cond with
       | none => pure ()
       | some e => checkExpr ctx "" e
       match upd with
       | none => pure ()
-      | some e => checkComparison "Comparison in third for expression" (Expr.info e)
-      checkStmt ctx body
+      | some e => checkExpr ctx "" e
+      checkStmt (CheckCtx.inLoop ctx) body
+  | .break =>
+      if ctx.loopDepth == 0 then
+        throw "Break outside a for/while"
+  | .continue =>
+      if ctx.loopDepth == 0 then
+        throw "Continue outside a for"
   | .return none =>
       if !ctx.inFunction then
         throw "Return outside of a function."
   | .return (some e) => do
       if !ctx.inFunction then
         throw "Return outside of a function."
-      checkReturnExpr (Expr.info e)
+      checkReturnValue ctx
       checkExpr ctx "" e
   | .print items =>
       for it in items do
@@ -94,11 +87,11 @@ partial def checkStmt (ctx : CheckCtx) (s : Stmt) : Except String Unit := do
         | .expr e => checkExpr ctx "" e
         | .str _ => pure ()
   | .block body => checkBody ctx body
-  | .auto _ | .break | .continue | .quit | .halt | .warranty | .limits | .str _ => pure ()
+  | .auto _ | .quit | .halt | .warranty | .limits | .str _ => pure ()
 end
 
 partial def checkFunDef (defn : FunDef) : Except String Unit :=
-  checkBody (CheckCtx.inFun {}) defn.body
+  checkBody (CheckCtx.inFun {} defn.void) defn.body
 
 partial def checkTopItem (item : TopItem) : Except String Unit :=
   match item with

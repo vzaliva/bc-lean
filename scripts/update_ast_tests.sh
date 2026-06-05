@@ -80,9 +80,6 @@ files=()
 for f in tests/**/*.b tests/**/*.bc; do
   files+=("$f")
 done
-for f in tests/constraints/*.b; do
-  files+=("$f")
-done
 
 active_jobs=0
 for src in "${files[@]}"; do

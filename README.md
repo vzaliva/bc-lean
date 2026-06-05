@@ -97,8 +97,9 @@ make test              # same as make ast-test
 make ast-test-update   # refresh tests/ast-expected/ after intentional AST changes
 ```
 
-Expected outputs live under `tests/ast-expected/`; deliberate failures under
-`tests/constraints/`. Tree-sitter-only checks remain `make parser-test`.
+Expected outputs live under `tests/ast-expected/`; hand-written context and
+negative fixtures live under `tests/constraints/`. Tree-sitter-only checks remain
+`make parser-test` and cover only the upstream corpus files.
 
 ## Project Structure
 

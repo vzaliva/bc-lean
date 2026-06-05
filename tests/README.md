@@ -10,7 +10,9 @@ Same license as GNU bc (GPL-3.0-or-later).
 
 ## Parser regression
 
-All `**/*.b` and `**/*.bc` files are parsed by `make parser-test` (tree-sitter).
+All upstream corpus `Test/` and `Examples/` `.b`/`.bc` files are parsed by
+`make parser-test` (tree-sitter). Hand-written AST/context fixtures under
+`tests/constraints/` are excluded because some are deliberately invalid input.
 
 **Excluded from parser regression** (not bc source):
 
@@ -39,8 +41,9 @@ make ast-test-update      # rewrite tests/ast-expected/ from current parser
 ```
 
 Golden files mirror paths under `tests/` (e.g. `tests/ast-expected/Test/array.b.output`).
-Constraint fixtures that must fail parsing checks live in `tests/constraints/` with
-matching `.fail` files under `tests/ast-expected/constraints/`.
+Constraint fixtures live in `tests/constraints/`; hard errors use matching `.fail`
+files under `tests/ast-expected/constraints/`, while warning-only GNU bc cases use
+ordinary `.output` files.
 
 ## Ground truth for grammar
 

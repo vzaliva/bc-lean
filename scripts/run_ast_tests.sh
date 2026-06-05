@@ -86,24 +86,23 @@ discover_tests() {
   for f in tests/**/*.b tests/**/*.bc; do
     found+=("$f")
   done
-  for f in tests/constraints/*.b; do
-    found+=("$f")
-  done
   printf '%s\n' "${found[@]}"
 }
 
 run_single_test() {
   local src="$1"
-  local base expected expect_type result_file report_file status_file
+  local base result_base expected expect_type result_file report_file status_file
   local exit_code diff_match pass
 
   base=$(basename "$src")
   base="${base%.b}"
   base="${base%.bc}"
+  result_base="${src#tests/}"
+  result_base="${result_base//\//__}"
   expected=$(expected_path_for "$src")
-  result_file="$TEMP_DIR/$base.result"
-  report_file="$TEMP_DIR/$base.report"
-  status_file="$TEMP_DIR/$base.status"
+  result_file="$TEMP_DIR/$result_base.result"
+  report_file="$TEMP_DIR/$result_base.report"
+  status_file="$TEMP_DIR/$result_base.status"
 
   if [[ -f "${expected}.output" ]]; then
     expected="${expected}.output"

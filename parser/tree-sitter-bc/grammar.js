@@ -18,11 +18,6 @@ module.exports = grammar({
     $.line_continuation,
   ],
 
-  conflicts: $ => [
-    [$._body_item],
-    [$.primary_expression, $.named_expression],
-  ],
-
   rules: {
     source_file: $ => repeat($._top_level_item),
 
@@ -32,10 +27,10 @@ module.exports = grammar({
       seq($.statement_sequence, $.newline),
     ),
 
-    statement_sequence: $ => prec.left(repeat1(choice(
-      seq($.statement, optional(";")),
-      ";",
-    ))),
+    statement_sequence: $ => prec.left(choice(
+      $.statement,
+      seq(optional($.statement), repeat1(seq(";", optional($.statement)))),
+    )),
 
     function_definition: $ => seq(
       "define",
@@ -47,11 +42,12 @@ module.exports = grammar({
       optional($.newline),
       "{",
       repeat($._body_item),
+      optional($.statement_sequence),
       "}",
     ),
 
     _body_item: $ => choice(
-      seq($.statement_sequence, optional($.newline)),
+      seq($.statement_sequence, $.newline),
       $.newline,
     ),
 
@@ -161,6 +157,7 @@ module.exports = grammar({
     block_statement: $ => seq(
       "{",
       repeat($._body_item),
+      optional($.statement_sequence),
       "}",
     ),
 

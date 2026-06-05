@@ -234,3 +234,94 @@ make parser-all   # 22/22 tree-sitter (unchanged)
 make test         # 27 passed, 0 failed
 make lean-build   # warning-clean
 ```
+
+---
+
+## Step 4 — Review and repair of Step 3 AST/constraint implementation
+
+**Date:** 4 June 2026  
+**Agent:** Codex (GPT-5)  
+**Duration:** ~20 minutes wall-clock, with the measured fix/retest loop running
+roughly **17:02–17:14 PDT**.
+
+### Request
+
+Review the Step 3 implementation described in `REPORT.md`: inspect the Lean
+source and test harnesses, run the relevant parser and AST tests, and consult
+the GNU bc 1.07.1 reference source where behaviour is unclear. Fix any problems
+found. Revisit the Step 3 **Deferred** note, decide which items should be fixed
+now and which genuinely depend on future operational semantics, and record the
+findings as Step 4 in this report, including timing, model, and prompt.
+
+### Method
+
+- Re-read the Step 3 modules (`Bc/Syntax.lean`, `Bc/Parser.lean`,
+  `Bc/Constraints.lean`, `Bc/Pretty.lean`), test harnesses, and goldens.
+- Re-ran the advertised targets. Initial `make parser-all` failed because Step 3
+  negative fixtures were being included in the parser-only acceptance corpus.
+- Checked the relevant GNU bc 1.07.1 actions in `bc-1.07.1/bc/bc.y` and string
+  handling in `scan.l`/`execute.c`.
+- Spot-checked current tree-sitter XML for `return(expr)` and reference
+  behaviours for warning-only `ct_warn` cases versus hard `yyerror` cases.
+
+### Findings and fixes
+
+1. **Parser-only regression was broken by Step 3 fixtures.** `make parser-all`
+   discovered `tests/constraints/parse-error.b`, which is intentionally invalid.
+   Fixed `scripts/parse_all_tests.sh` to exclude `tests/constraints/`; parser
+   regression is again the 22 upstream corpus files.
+2. **AST harness discovered constraint fixtures twice and used basename-only temp
+   files.** This caused duplicate output and could hide collisions. Fixed
+   `scripts/run_ast_tests.sh` / `scripts/update_ast_tests.sh` to discover each
+   test once and use path-derived temp names.
+3. **`return(expr)` was parsed as `return; expr`.** The grammar allowed adjacent
+   statements without semicolon/newline separation, both in `statement_sequence`
+   and in block/function body items. Fixed the grammar so semicolon/newline
+   separation is required, while allowing a final unterminated statement sequence
+   before `}`. The deferred return parser note is therefore **fixed now**, not
+   postponed.
+4. **String literals were not represented accurately.** The XML conversion used
+   trimmed XML character text, which included quote delimiters and could discard
+   significant spaces/newlines. `Bc.Parser` now slices string spans from the
+   original source and stores the literal body.
+5. **`define void f()` lost its `void` flag.** Void detection now inspects the
+   function prefix before the `name` field. Added a hard-failure fixture for
+   `Return expression in a void function.`
+6. **Hard errors were conflated with GNU bc warnings.** Nested assignment,
+   comparison in builtin arguments, comparison in `for` init/update, and
+   return-parenthesis/return-comparison are accepted by default GNU bc; many are
+   `ct_warn` diagnostics only in strict/warning modes. Converted those fixtures
+   to `.output` goldens. Kept hard failures for `yyerror`-style checks available
+   without operational semantics: return outside a function, return value in a
+   void function, and `break`/`continue` outside a loop.
+7. **Exponentiation AST associativity was wrong.** `^` is right-associative in
+   `bc.y`; the XML bridge had been left-folding the flat tree-sitter node. Added
+   a right fold for power expressions.
+8. **Stale tree-sitter conflict declarations caused warnings.** Removed the now
+   unnecessary conflict entries; `tree-sitter generate` is warning-free.
+
+### Deferred decision
+
+The return parsing part of the Step 3 deferred note was a grammar bug and is now
+fixed. Return-parenthesis and return-comparison diagnostics should **not** be hard
+parse failures for the GNU bc default semantics; they belong in a future
+diagnostics/strict-standard mode if the project models `bc -s` / `bc -w`.
+
+The remaining void-expression checks for calls to void functions should stay
+deferred until the project has a function symbol table / operational semantics:
+GNU bc's behaviour depends on function definitions and call resolution, not just
+local syntax. Extension `ct_warn` noise (`&&`, `print`, `void`, etc.) is likewise
+best handled by a later diagnostics mode.
+
+### Verification
+
+```bash
+lake build
+# Build completed successfully (24 jobs).
+
+make parser-all
+# parse_all_tests: 22 passed, 0 failed (22 total)
+
+make test
+# AST Test Summary: Passed: 33, Failed: 0, Skipped: 0
+```

@@ -10,31 +10,6 @@ not lost.
 
 ---
 
-## #6 — Dead `SmallStep.evalBody` / `runBodyConfig`
-
-`Bc/SmallStep.lean:345-355` defines `runBodyConfig` (a fuel-driven loop running a
-body to completion) and `evalBody` on top of it. Nothing outside `SmallStep`
-references them — `step`'s `.activeCall` case uses `stepBody` inline instead.
-Besides being dead, it reintroduces a fuel-bounded big-step-style driver *inside*
-the module framed as "fuel-free structural" semantics, which muddies that story.
-
-**Action:** remove `runBodyConfig` + `evalBody`, or, if kept for testing, move
-them out of the structural module and document why. First re-grep for any
-`Main.lean` / test / proof use before deleting.
-
-## #7 — Quit handling is split and partially redundant
-
-`TopItemTerm.ofTopItem` (`Bc/SmallStep.lean:314`) already collapses a
-quit-containing statement list to `[.stmt .quit]`, yet `step`
-(`Bc/SmallStep.lean:332`) *also* recomputes `TopItemTerm.containsQuit` on the
-head item on **every** step. The per-step rescan only does real work for
-`funDef` items; for statement items it is redundant.
-
-**Action:** consolidate the quit policy in one place (decide it once at
-conversion time, or once per top-item rather than per-step). Note: the
-equivalence proof's `containsQuit`-alignment lemmas (`Bc/BigSmall.lean`) lean on
-the current shape, so re-check those if this is changed.
-
 ## #8 — Small-step stepping is quadratic
 
 Every `step` re-traverses the entire head term to locate the redex (and re-runs

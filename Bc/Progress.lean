@@ -56,7 +56,7 @@ theorem progress (config : Config) :
       exact .inl (.runtimeError st message hstep)
 
 /-- Terminal configurations cannot take a transition. -/
-theorem terminal_is_normal_form {config : Config}
+private theorem terminal_is_normal_form {config : Config}
     (h : Terminal config) : NormalForm Transition config := by
   intro hstep
   cases hstep with
@@ -70,21 +70,21 @@ theorem terminal_is_normal_form {config : Config}
           cases stepProg_deterministic hterminal htransition
 
 /-- A normal form for the transition relation must be terminal. -/
-theorem normal_form_is_terminal {config : Config}
+private theorem normal_form_is_terminal {config : Config}
     (h : NormalForm Transition config) : Terminal config := by
   match progress config with
   | .inl hterminal => exact hterminal
   | .inr hstep => exact False.elim (h hstep)
 
 /-- Normal forms and terminal configurations coincide for this step relation. -/
-theorem normal_form_iff_terminal (config : Config) :
+private theorem normal_form_iff_terminal (config : Config) :
     NormalForm Transition config ↔ Terminal config := by
   constructor
   · exact normal_form_is_terminal
   · exact terminal_is_normal_form
 
 /-- Corollary of progress: there are no stuck configurations. -/
-theorem not_stuck (config : Config) : ¬ Stuck config := by
+private theorem not_stuck (config : Config) : ¬ Stuck config := by
   intro h
   exact h.2 (normal_form_is_terminal h.1)
 

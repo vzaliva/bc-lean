@@ -24,7 +24,7 @@ open SmallStep
 
 /-! ### Quit-predicate alignment (source AST ↔ residual terms) -/
 
-theorem StmtTerm.listContainsQuit_append (xs ys : List StmtTerm) :
+private theorem StmtTerm.listContainsQuit_append (xs ys : List StmtTerm) :
     StmtTerm.listContainsQuit (xs ++ ys) =
       (StmtTerm.listContainsQuit xs || StmtTerm.listContainsQuit ys) := by
   induction xs with
@@ -33,7 +33,7 @@ theorem StmtTerm.listContainsQuit_append (xs ys : List StmtTerm) :
 
 mutual
 
-theorem containsQuit_ofStmt : (s : Stmt) →
+private theorem containsQuit_ofStmt : (s : Stmt) →
     StmtTerm.containsQuit (StmtTerm.ofStmt s) = Stmt.containsQuit s
   | .expr _ => by simp [StmtTerm.containsQuit, StmtTerm.ofStmt, Stmt.containsQuit]
   | .str _ => by simp [StmtTerm.containsQuit, StmtTerm.ofStmt, Stmt.containsQuit]
@@ -56,7 +56,7 @@ theorem containsQuit_ofStmt : (s : Stmt) →
         containsQuit_ofBodyItems body]
 termination_by s => sizeOf s
 
-theorem listContainsQuit_ofStmts : (ss : List Stmt) →
+private theorem listContainsQuit_ofStmts : (ss : List Stmt) →
     StmtTerm.listContainsQuit (StmtTerm.ofStmts ss) = stmtsContainQuit ss
   | [] => by simp [StmtTerm.listContainsQuit, StmtTerm.ofStmts, stmtsContainQuit]
   | s :: rest => by
@@ -64,7 +64,7 @@ theorem listContainsQuit_ofStmts : (ss : List Stmt) →
         listContainsQuit_ofStmts rest, containsQuit_ofStmt s]
 termination_by ss => sizeOf ss
 
-theorem containsQuit_ofBodyItems : (items : List BodyItem) →
+private theorem containsQuit_ofBodyItems : (items : List BodyItem) →
     BodyTerm.containsQuit (.stmts (BodyTerm.ofBodyItems items)) = bodyContainsQuit items
   | [] => by simp [BodyTerm.containsQuit, BodyTerm.ofBodyItems, bodyContainsQuit,
       StmtTerm.listContainsQuit]
@@ -87,7 +87,7 @@ end
 private def topItemStmtsOf (ss : List StmtTerm) : List TopItemTerm :=
   ss.map (fun s => TopItemTerm.stmt s)
 
-theorem listContainsQuit_ofStmtTerms (ss : List StmtTerm) :
+private theorem listContainsQuit_ofStmtTerms (ss : List StmtTerm) :
     (topItemStmtsOf ss).any TopItemTerm.containsQuit = StmtTerm.listContainsQuit ss := by
   induction ss with
   | nil => simp [topItemStmtsOf, StmtTerm.listContainsQuit]
@@ -98,15 +98,15 @@ theorem listContainsQuit_ofStmtTerms (ss : List StmtTerm) :
       simp [topItemStmtsOf, StmtTerm.listContainsQuit, List.map, ih',
         TopItemTerm.containsQuit]
 
-theorem TopItemTerm.ofTopItem_stmts_map_noQuit (ss : List Stmt) (h : ¬ stmtsContainQuit ss) :
+private theorem TopItemTerm.ofTopItem_stmts_map_noQuit (ss : List Stmt) (h : ¬ stmtsContainQuit ss) :
     TopItemTerm.ofTopItem (.stmts ss) = topItemStmtsOf (StmtTerm.ofStmts ss) := by
   simp [TopItemTerm.ofTopItem, topItemStmtsOf, h]
 
-theorem TopItemTerm.ofTopItem_stmts_quit (ss : List Stmt) (h : stmtsContainQuit ss) :
+private theorem TopItemTerm.ofTopItem_stmts_quit (ss : List Stmt) (h : stmtsContainQuit ss) :
     TopItemTerm.ofTopItem (.stmts ss) = [.stmt .quit] := by
   simp [TopItemTerm.ofTopItem, h]
 
-theorem TopItemTerm.containsQuit_ofTopItem_stmts (ss : List Stmt) :
+private theorem TopItemTerm.containsQuit_ofTopItem_stmts (ss : List Stmt) :
     (TopItemTerm.ofTopItem (.stmts ss)).any TopItemTerm.containsQuit =
       TopItem.containsQuit (.stmts ss) := by
   by_cases h : stmtsContainQuit ss
@@ -115,18 +115,18 @@ theorem TopItemTerm.containsQuit_ofTopItem_stmts (ss : List Stmt) :
   · rw [TopItemTerm.ofTopItem_stmts_map_noQuit ss h, listContainsQuit_ofStmtTerms,
       listContainsQuit_ofStmts, TopItem.containsQuit]
 
-theorem TopItemTerm.containsQuit_ofTopItem_funDef (defn : FunDef) :
+private theorem TopItemTerm.containsQuit_ofTopItem_funDef (defn : FunDef) :
     (TopItemTerm.ofTopItem (.funDef defn)).any TopItemTerm.containsQuit =
       TopItem.containsQuit (.funDef defn) := by
   simp [TopItemTerm.ofTopItem, TopItem.containsQuit, TopItemTerm.containsQuit]
 
-theorem TopItemTerm.containsQuit_ofTopItem (item : TopItem) :
+private theorem TopItemTerm.containsQuit_ofTopItem (item : TopItem) :
     (TopItemTerm.ofTopItem item).any TopItemTerm.containsQuit = TopItem.containsQuit item := by
   cases item with
   | funDef defn => exact TopItemTerm.containsQuit_ofTopItem_funDef defn
   | stmts ss => exact TopItemTerm.containsQuit_ofTopItem_stmts ss
 
-theorem topItemStmtsOf_append (xs ys : List StmtTerm) :
+private theorem topItemStmtsOf_append (xs ys : List StmtTerm) :
     topItemStmtsOf (xs ++ ys) = topItemStmtsOf xs ++ topItemStmtsOf ys := by
   simp [topItemStmtsOf, List.map_append]
 
@@ -374,7 +374,7 @@ private theorem stepConfig_body_next {st terms rest st' terms'}
   | cons stmt terms =>
       simp [StmtTerm.listContainsQuit] at hno
       rcases hno with ⟨hstmtNo, hrestNo⟩
-      simp [topItemStmtsOf, step, TopItemTerm.containsQuit, hstmtNo, stepBody] at hstep ⊢
+      simp [topItemStmtsOf, step, stepBody] at hstep ⊢
       cases hstmt : stepStmt st stmt <;> simp [hstmt] at hstep ⊢
       · rcases hstep with ⟨rfl, rfl⟩
         rfl
@@ -391,7 +391,7 @@ private theorem stepConfig_body_control {st terms rest st' c}
   | cons stmt terms =>
       simp [StmtTerm.listContainsQuit] at hno
       rcases hno with ⟨hstmtNo, _⟩
-      simp [topItemStmtsOf, step, TopItemTerm.containsQuit, hstmtNo, stepBody] at hstep ⊢
+      simp [topItemStmtsOf, step, stepBody] at hstep ⊢
       cases hstmt : stepStmt st stmt <;> simp [hstmt] at hstep ⊢
       rcases hstep with ⟨rfl, rfl⟩
       constructor <;> rfl
@@ -406,12 +406,12 @@ private theorem stepConfig_body_error {st terms rest st' msg}
   | cons stmt terms =>
       simp [StmtTerm.listContainsQuit] at hno
       rcases hno with ⟨hstmtNo, _⟩
-      simp [topItemStmtsOf, step, TopItemTerm.containsQuit, hstmtNo, stepBody] at hstep ⊢
+      simp [topItemStmtsOf, step, stepBody] at hstep ⊢
       cases hstmt : stepStmt st stmt <;> simp [hstmt] at hstep ⊢
       rcases hstep with ⟨rfl, rfl⟩
       constructor <;> rfl
 
-theorem BodyRuns.lift_done_to_config {rest : ProgramTerm}
+private theorem BodyRuns.lift_done_to_config {rest : ProgramTerm}
     {st terms st' o}
     (hno : StmtTerm.listContainsQuit terms = false)
     (h : BodyRuns st (.stmts terms) (.done st'))
@@ -442,7 +442,7 @@ theorem BodyRuns.lift_done_to_config {rest : ProgramTerm}
             (stepConfig_body_next hno hstep)
             (ih hno' rfl hout)
 
-theorem BodyRuns.lift_control_to_config {rest : ProgramTerm}
+private theorem BodyRuns.lift_control_to_config {rest : ProgramTerm}
     {st terms st' c}
     (hno : StmtTerm.listContainsQuit terms = false)
     (h : BodyRuns st (.stmts terms) (.control st' c)) :
@@ -464,7 +464,7 @@ theorem BodyRuns.lift_control_to_config {rest : ProgramTerm}
             (stepConfig_body_next hno hstep)
             (ih hno' rfl hout)
 
-theorem BodyRuns.lift_error_to_config {rest : ProgramTerm}
+private theorem BodyRuns.lift_error_to_config {rest : ProgramTerm}
     {st terms st' msg}
     (hno : StmtTerm.listContainsQuit terms = false)
     (h : BodyRuns st (.stmts terms) (.runtimeError st' msg)) :
@@ -491,19 +491,17 @@ private def resultToRunResult : Result Control → RunResult
   | .outOfFuel st => .outOfFuel st
   | .runtimeError st msg => .runtimeError st msg
 
-private theorem step_topItem_containsQuit {st item rest}
-    (hquit : TopItem.containsQuit item = true) :
-    step ⟨st, TopItemTerm.ofTopItem item ++ rest⟩ = .done { st with stopped := true } := by
-  cases item with
-  | funDef defn =>
-      have hbody : bodyContainsQuit defn.body = true := by
-        simp [TopItem.containsQuit] at hquit
-        exact hquit
-      simp [TopItemTerm.ofTopItem, step, TopItemTerm.containsQuit, hbody]
-  | stmts ss =>
-      simp [TopItem.containsQuit] at hquit
-      simp [TopItemTerm.ofTopItem, hquit, step, TopItemTerm.containsQuit,
-        StmtTerm.containsQuit]
+private theorem step_funDef_containsQuit {st defn rest}
+    (hquit : bodyContainsQuit defn.body = true) :
+    step ⟨st, TopItemTerm.ofTopItem (.funDef defn) ++ rest⟩ =
+      .done { st with stopped := true } := by
+  simp [TopItemTerm.ofTopItem, step, hquit]
+
+private theorem step_stmts_containsQuit {st ss rest}
+    (hquit : stmtsContainQuit ss = true) :
+    step ⟨st, TopItemTerm.ofTopItem (.stmts ss) ++ rest⟩ =
+      .control { st with stopped := true } .quit := by
+  simp [TopItemTerm.ofTopItem, hquit, step, stepStmt]
 
 private theorem evalProgramItems_to_ConfigRuns {fuel st program r}
     (hst : st.stopped = false)
@@ -528,13 +526,27 @@ private theorem evalProgramItems_to_ConfigRuns {fuel st program r}
           | true =>
               simp [hquit] at h
               cases h
-              exact ⟨.done { st with stopped := true },
-                ConfigRuns.stop
-                  (by simpa [ProgramTerm.ofProgram] using
-                    (step_topItem_containsQuit (st := st) (item := item)
-                      (rest := ProgramTerm.ofProgram rest) hquit))
-                  (by simp [StepResultFinal]),
-                by simp [stepResultToRunResult, resultToRunResult]⟩
+              cases item with
+              | funDef defn =>
+                  have hbody : bodyContainsQuit defn.body = true := by
+                    simpa [TopItem.containsQuit] using hquit
+                  exact ⟨.done { st with stopped := true },
+                    ConfigRuns.stop
+                      (by simpa [ProgramTerm.ofProgram] using
+                        (step_funDef_containsQuit (st := st) (defn := defn)
+                          (rest := ProgramTerm.ofProgram rest) hbody))
+                      (by simp [StepResultFinal]),
+                    by simp [stepResultToRunResult, resultToRunResult]⟩
+              | stmts ss =>
+                  have hstmts : stmtsContainQuit ss = true := by
+                    simpa [TopItem.containsQuit] using hquit
+                  exact ⟨.control { st with stopped := true } .quit,
+                    ConfigRuns.stop
+                      (by simpa [ProgramTerm.ofProgram] using
+                        (step_stmts_containsQuit (st := st) (ss := ss)
+                          (rest := ProgramTerm.ofProgram rest) hstmts))
+                      (by simp [StepResultFinal]),
+                    by simp [stepResultToRunResult, resultToRunResult]⟩
           | false =>
               simp [hquit] at h
               cases htop : evalTopItem fuel' st item with
@@ -556,7 +568,7 @@ private theorem evalProgramItems_to_ConfigRuns {fuel st program r}
                                   simp [TopItem.containsQuit] at hquit
                                   exact hquit
                                 simp [ProgramTerm.ofProgram, TopItemTerm.ofTopItem, step, next,
-                                  TopItemTerm.containsQuit, hbody])
+                                  hbody])
                               hcont,
                             hout⟩
                       | stmts ss =>
@@ -775,7 +787,7 @@ private theorem ConfigRuns.body_split {st : RuntimeState} {terms : List StmtTerm
 
 /-- Termination transfer: a finite small-step run of a program forces the
 big-step evaluator to terminate on some fuel budget. -/
-theorem termination_transfer {st : RuntimeState} {program : Program}
+private theorem termination_transfer {st : RuntimeState} {program : Program}
     {o : StepResult} (hst : st.stopped = false)
     (h : ConfigRuns ⟨st, ProgramTerm.ofProgram program⟩ o) :
     ∃ fb, ResultNotFuel (evalProgramItems fb st program) := by
@@ -792,8 +804,7 @@ theorem termination_transfer {st : RuntimeState} {program : Program}
                 exact hquit
               have hstep : step ⟨st, ProgramTerm.ofProgram (TopItem.funDef defn :: rest)⟩ =
                   .next ⟨setFunction st defn, ProgramTerm.ofProgram rest⟩ := by
-                simp [ProgramTerm.ofProgram, TopItemTerm.ofTopItem, step, next,
-                  TopItemTerm.containsQuit, hbody]
+                simp [ProgramTerm.ofProgram, TopItemTerm.ofTopItem, step, next, hbody]
               have hrun := ConfigRuns.invert_next h hstep
               have hst' : (setFunction st defn).stopped = false := hst
               obtain ⟨fb, hfb⟩ := ih hst' hrun
@@ -869,10 +880,10 @@ inductive FinalRunResult : RunResult → Prop where
   | runtimeError (st : RuntimeState) (message : String) :
       FinalRunResult (.runtimeError st message)
 
-theorem RunResultFinal_of_FinalRunResult {r : RunResult} (h : FinalRunResult r) :
+private theorem RunResultFinal_of_FinalRunResult {r : RunResult} (h : FinalRunResult r) :
     RunResultFinal r := by cases h <;> simp [RunResultFinal]
 
-theorem FinalRunResult_of_RunResultFinal {r : RunResult} (h : RunResultFinal r) :
+private theorem FinalRunResult_of_RunResultFinal {r : RunResult} (h : RunResultFinal r) :
     FinalRunResult r := by
   cases r with
   | success st => exact .success st

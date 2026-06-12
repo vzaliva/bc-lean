@@ -40,7 +40,7 @@ private theorem StepLVal.not_isTarget {st target o} (h : StepLVal st target o) :
     LValTerm.isTarget target = false := by
   cases target <;> first | rfl | exact absurd h StepLVal.not_target
 
-/-- Reduction lemma for expression congruences: a non-value subterm makes the
+/-- Reduction helper for expression congruences: a non-value subterm makes the
     executable take the matching expression-context branch. -/
 private theorem stepExpr_arrayAccess_eq {st name index} (h : ExprTerm.isValue index = false) :
     stepExpr st (.arrayAccess name index) =
@@ -83,7 +83,7 @@ private theorem stepExpr_paren_eq {st body} (h : ExprTerm.isValue body = false) 
     stepExpr st (.paren body) = liftE (fun e => .paren e) (stepExpr st body) := by
   cases body <;> first | rfl | simp_all [ExprTerm.isValue]
 
-/-- Reduction lemma for expression contexts over lvalues: a non-target lvalue
+/-- Reduction helper for expression contexts over lvalues: a non-target lvalue
     makes the executable take the matching lvalue-context branch. -/
 private theorem stepExpr_assign_eq {st lhs op rhs} (h : LValTerm.isTarget lhs = false) :
     stepExpr st (.assign lhs op rhs) =
@@ -97,7 +97,7 @@ private theorem stepExpr_bump_eq {st op target} (h : LValTerm.isTarget target = 
         (stepLVal st target) := by
   cases target <;> first | rfl | simp_all [LValTerm.isTarget]
 
-/-- Reduction lemma for the lvalue-array congruence: a non-value index makes the
+/-- Reduction helper for the lvalue-array congruence: a non-value index makes the
     executable take the congruence branch, matching `liftIndexLVal`. -/
 private theorem stepLVal_array_eq {st name index} (h : ExprTerm.isValue index = false) :
     stepLVal st (.array name index) = liftIndexLVal name (stepExpr st index) := by
@@ -416,16 +416,16 @@ private theorem stepBody_sound {st b o} (h : StepBody st b o) : stepBody st b = 
   case retCongr expr o hprem hih =>
     rw [stepStmt_return_eq (StepExpr.not_isValue hprem), hih]
 
-theorem stepProg_sound {c o} (h : StepProg c o) : step c = o := by
+private theorem stepProg_sound {c o} (h : StepProg c o) : step c = o := by
   cases h with
   | nil => rfl
-  | quit hquit =>
+  | quitFunDef hquit =>
       simp [step, hquit]
   | funDef hquit =>
       simp [step, next, hquit]
-  | stmt hquit hstmt =>
+  | stmt hstmt =>
       rw [step]
-      simp [next, liftProg, hquit, stepStmt_sound hstmt]
+      simp [next, liftProg, stepStmt_sound hstmt]
       rfl
 
 /-! ### Completeness: every executable step is derivable -/
@@ -758,21 +758,21 @@ theorem stepProg_complete {c} : StepProg c (step c) := by
       | nil =>
           simpa [step] using (StepProg.nil (st := st))
       | cons item rest =>
-          cases hquit : TopItemTerm.containsQuit item with
-          | false =>
-              cases item with
-              | funDef defn =>
+          cases item with
+          | funDef defn =>
+              cases hquit : bodyContainsQuit defn.body with
+              | false =>
                   simpa [step, next, hquit] using
                     (StepProg.funDef (st := st) (defn := defn) (rest := rest) hquit)
-              | stmt stmt =>
-                  simpa [step, next, liftProg, hquit] using
-                    (StepProg.stmt (st := st) (stmt := stmt) (rest := rest) hquit
-                      (stepStmt_complete (st := st) (s := stmt)))
-          | true =>
-              simpa [step, hquit] using
-                (StepProg.quit (st := st) (item := item) (rest := rest) hquit)
+              | true =>
+                  simpa [step, hquit] using
+                    (StepProg.quitFunDef (st := st) (defn := defn) (rest := rest) hquit)
+          | stmt stmt =>
+              simpa [step, next, liftProg] using
+                (StepProg.stmt (st := st) (stmt := stmt) (rest := rest)
+                  (stepStmt_complete (st := st) (s := stmt)))
 
-theorem stepProg_iff (c o) : StepProg c o ↔ step c = o := by
+private theorem stepProg_iff (c o) : StepProg c o ↔ step c = o := by
   constructor
   · exact stepProg_sound
   · intro h

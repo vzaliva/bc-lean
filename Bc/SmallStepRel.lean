@@ -379,14 +379,13 @@ end
 inductive StepProg : Config → StepResult → Prop where
   | nil {st} :
       StepProg ⟨st, []⟩ (.done st)
-  | quit {st item rest} :
-      TopItemTerm.containsQuit item = true →
-      StepProg ⟨st, item :: rest⟩ (.done { st with stopped := true })
+  | quitFunDef {st defn rest} :
+      bodyContainsQuit defn.body = true →
+      StepProg ⟨st, .funDef defn :: rest⟩ (.done { st with stopped := true })
   | funDef {st defn rest} :
-      TopItemTerm.containsQuit (.funDef defn) = false →
+      bodyContainsQuit defn.body = false →
       StepProg ⟨st, .funDef defn :: rest⟩ (.next ⟨setFunction st defn, rest⟩)
   | stmt {st stmt rest o} :
-      TopItemTerm.containsQuit (.stmt stmt) = false →
       StepStmt st stmt o →
       StepProg ⟨st, .stmt stmt :: rest⟩ (liftProg rest o)
 

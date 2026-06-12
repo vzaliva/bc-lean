@@ -449,7 +449,7 @@ def bindParams (st : RuntimeState) (params : List ParamDecl) (args : List (Sum N
 
 /-! ### Runtime-state preservation facts used by semantics equivalence proofs -/
 
-theorem lookupFunction_setArray (st : RuntimeState) (id : ArrayId) (a : BcArray)
+private theorem lookupFunction_setArray (st : RuntimeState) (id : ArrayId) (a : BcArray)
     (name : Name) :
     lookupFunction (setArray st id a) name = lookupFunction st name := by
   rfl
@@ -484,13 +484,13 @@ theorem lookupFunction_bumpLValueTarget (st : RuntimeState) (target : LValueTarg
   | special v => cases v <;> simp [bumpLValueTarget, lookupFunction]
   | arrayElem id idx => simp [bumpLValueTarget, lookupFunction_writeLValueTarget]
 
-theorem lookupFunction_appendOutputChar (st : RuntimeState) (c : Char) (name : Name) :
+private theorem lookupFunction_appendOutputChar (st : RuntimeState) (c : Char) (name : Name) :
     lookupFunction (appendOutputChar st c) name = lookupFunction st name := by
   unfold appendOutputChar lookupFunction
   split <;> simp
   split <;> simp
 
-theorem lookupFunction_foldl_appendOutputChar (chars : List Char)
+private theorem lookupFunction_foldl_appendOutputChar (chars : List Char)
     (st : RuntimeState) (name : Name) :
     lookupFunction (chars.foldl appendOutputChar st) name = lookupFunction st name := by
   induction chars generalizing st with
@@ -509,7 +509,7 @@ theorem stopped_setFunction (st : RuntimeState) (defn : FunDef) :
     (setFunction st defn).stopped = st.stopped := by
   rfl
 
-theorem stopped_setArray (st : RuntimeState) (id : ArrayId) (a : BcArray) :
+private theorem stopped_setArray (st : RuntimeState) (id : ArrayId) (a : BcArray) :
     (setArray st id a).stopped = st.stopped := by
   rfl
 
@@ -543,13 +543,13 @@ theorem stopped_bumpLValueTarget (st : RuntimeState) (target : LValueTarget)
   | special v => cases v <;> simp [bumpLValueTarget]
   | arrayElem id idx => simp [bumpLValueTarget, stopped_writeLValueTarget]
 
-theorem stopped_appendOutputChar (st : RuntimeState) (c : Char) :
+private theorem stopped_appendOutputChar (st : RuntimeState) (c : Char) :
     (appendOutputChar st c).stopped = st.stopped := by
   unfold appendOutputChar
   split <;> simp
   split <;> simp
 
-theorem stopped_foldl_appendOutputChar (chars : List Char) (st : RuntimeState) :
+private theorem stopped_foldl_appendOutputChar (chars : List Char) (st : RuntimeState) :
     (chars.foldl appendOutputChar st).stopped = st.stopped := by
   induction chars generalizing st with
   | nil => rfl
@@ -728,7 +728,7 @@ theorem stopped_bindParams {st st' : RuntimeState}
     exact bindParamsLoop_stopped h
   · simp [hlen] at h
 
-theorem lookupFunction_bindAutoDecl (st : RuntimeState) (decl : ParamDecl) (name : Name) :
+private theorem lookupFunction_bindAutoDecl (st : RuntimeState) (decl : ParamDecl) (name : Name) :
     lookupFunction (bindAutoDecl st decl) name = lookupFunction st name := by
   unfold bindAutoDecl
   cases decl with

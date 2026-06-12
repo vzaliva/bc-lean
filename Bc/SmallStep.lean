@@ -329,30 +329,18 @@ def step (config : Config) : StepResult :=
   match config.program with
   | [] => .done config.state
   | item :: rest =>
-      if TopItemTerm.containsQuit item then
-        .done { config.state with stopped := true }
-      else
-        match item with
-        | .funDef defn =>
+      match item with
+      | .funDef defn =>
+          if bodyContainsQuit defn.body then
+            .done { config.state with stopped := true }
+          else
             next (setFunction config.state defn) rest
-        | .stmt stmt =>
-            match stepStmt config.state stmt with
-            | .next st stmt' => next st (.stmt stmt' :: rest)
-            | .done st => next st rest
-            | .control st control => .control st control
-            | .runtimeError st msg => .runtimeError st msg
-
-private def runBodyConfig : Nat → RuntimeState → BodyTerm → Result Control
-  | 0, st, _ => .outOfFuel st
-  | fuel + 1, st, body =>
-      match stepBody st body with
-      | .next st body' => runBodyConfig fuel st body'
-      | .done st => .ok st .normal
-      | .control st control => .ok st control
-      | .runtimeError st msg => .runtimeError st msg
-
-def evalBody (fuel : Nat) (st : RuntimeState) (body : List BodyItem) : Result Control :=
-  runBodyConfig fuel st (BodyTerm.ofBody body)
+      | .stmt stmt =>
+          match stepStmt config.state stmt with
+          | .next st stmt' => next st (.stmt stmt' :: rest)
+          | .done st => next st rest
+          | .control st control => .control st control
+          | .runtimeError st msg => .runtimeError st msg
 
 def initialConfig (st : RuntimeState) (program : Program) : Config :=
   { state := st, program := ProgramTerm.ofProgram program }

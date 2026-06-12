@@ -432,7 +432,7 @@ theorem stepProg_sound {c o} (h : StepProg c o) : step c = o := by
 
 mutual
 
-private theorem stepExpr_complete {st e} (h : ExprTerm.isValue e = false) :
+theorem stepExpr_complete {st e} (h : ExprTerm.isValue e = false) :
     StepExpr st e (stepExpr st e) := by
   cases e with
   | value value => simp [ExprTerm.isValue] at h
@@ -584,7 +584,7 @@ private theorem stepExpr_complete {st e} (h : ExprTerm.isValue e = false) :
         rw [stepExpr_paren_eq (by rfl)]
         exact StepExpr.parenCongr (stepExpr_complete (st := st) (e := _) (by rfl))
 
-private theorem stepLVal_complete {st lv} (h : LValTerm.isTarget lv = false) :
+theorem stepLVal_complete {st lv} (h : LValTerm.isTarget lv = false) :
     StepLVal st lv (stepLVal st lv) := by
   cases lv with
   | target target => simp [LValTerm.isTarget] at h
@@ -608,7 +608,7 @@ private theorem stepLVal_complete {st lv} (h : LValTerm.isTarget lv = false) :
         rw [stepLVal_array_eq (by rfl)]
         exact StepLVal.arrCongr (stepExpr_complete (st := st) (e := _) (by rfl))
 
-private theorem stepArgs_complete {st a} : StepArgs st a (stepArgs st a) := by
+theorem stepArgs_complete {st a} : StepArgs st a (stepArgs st a) := by
   cases a with
   | nil => simpa [stepArgs] using (StepArgs.nil (st := st))
   | cons arg rest =>
@@ -627,7 +627,7 @@ private theorem stepArgs_complete {st a} : StepArgs st a (stepArgs st a) := by
             rw [stepArgs_expr_eq (by rfl)]
             exact StepArgs.exprStep (stepExpr_complete (st := st) (e := _) (by rfl))
 
-private theorem stepStmt_complete {st s} : StepStmt st s (stepStmt st s) := by
+theorem stepStmt_complete {st s} : StepStmt st s (stepStmt st s) := by
   cases s with
   | done => simpa [stepStmt] using (StepStmt.done (st := st))
   | expr original expr =>
@@ -739,7 +739,7 @@ private theorem stepStmt_complete {st s} : StepStmt st s (stepStmt st s) := by
         (StepStmt.block (st := st) (body := body)
           (stepBody_complete (st := st) (b := body)))
 
-private theorem stepBody_complete {st b} : StepBody st b (stepBody st b) := by
+theorem stepBody_complete {st b} : StepBody st b (stepBody st b) := by
   cases b with
   | stmts stmts =>
       cases stmts with

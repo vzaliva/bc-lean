@@ -213,7 +213,7 @@ def BodyTerm.ofBody (body : List BodyItem) : BodyTerm :=
 
 mutual
 
-private def StmtTerm.containsQuit : StmtTerm → Bool
+def StmtTerm.containsQuit : StmtTerm → Bool
   | .done => false
   | .expr _ _ => false
   | .eval _ => false
@@ -232,11 +232,11 @@ private def StmtTerm.containsQuit : StmtTerm → Bool
   | .block body => BodyTerm.containsQuit body
 termination_by stmt => sizeOf stmt
 
-private def BodyTerm.containsQuit : BodyTerm → Bool
+def BodyTerm.containsQuit : BodyTerm → Bool
   | .stmts stmts => StmtTerm.listContainsQuit stmts
 termination_by body => sizeOf body
 
-private def StmtTerm.listContainsQuit : List StmtTerm → Bool
+def StmtTerm.listContainsQuit : List StmtTerm → Bool
   | [] => false
   | stmt :: rest => StmtTerm.containsQuit stmt || StmtTerm.listContainsQuit rest
 termination_by stmts => sizeOf stmts

@@ -311,15 +311,12 @@ def stepBody (st : RuntimeState) : BodyTerm → BodyOutcome
 
 end
 
-private def TopItemTerm.ofTermStmts : List StmtTerm → List TopItemTerm
-  | [] => []
-  | s :: rest => TopItemTerm.stmt s :: TopItemTerm.ofTermStmts rest
-
 def TopItemTerm.ofTopItem (item : TopItem) : List TopItemTerm :=
   match item with
   | .funDef defn => [.funDef defn]
   | .stmts ss =>
-      if stmtsContainQuit ss then [.stmt .quit] else TopItemTerm.ofTermStmts (StmtTerm.ofStmts ss)
+      if stmtsContainQuit ss then [.stmt .quit]
+      else (StmtTerm.ofStmts ss).map (fun s => TopItemTerm.stmt s)
 
 def ProgramTerm.ofProgram : Program → ProgramTerm
   | [] => []

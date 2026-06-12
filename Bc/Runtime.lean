@@ -410,34 +410,341 @@ def bumpLValueTarget (st : RuntimeState) (target : LValueTarget) (up : Bool) :
       let newValue := if up then Num.add old Num.one else Num.sub old Num.one
       (writeLValueTarget st target newValue, old, newValue)
 
+private def bindParam (st : RuntimeState) (param : ParamDecl) (arg : Sum Num Name) :
+    Except String RuntimeState :=
+  match param, arg with
+  | .scalar name, .inl n =>
+      match st.frames with
+      | frame :: rest =>
+          .ok { st with frames :=
+            { frame with scalars := assocSet frame.scalars name n } :: rest }
+      | [] => .error "internal error: missing call frame"
+  | .array name, .inr actual =>
+      let (st1, srcId) := ensureArrayId st actual
+      let (st2, dstId) := freshArray st1
+      let copied := getArray st2 srcId
+      let st := setArray st2 dstId copied
+      match st.frames with
+      | frame :: rest =>
+          .ok { st with frames :=
+            { frame with arrays := assocSet frame.arrays name dstId } :: rest }
+      | [] => .error "internal error: missing call frame"
+  | .scalar name, .inr _ => .error s!"Parameter type mismatch, parameter {name}"
+  | .array name, .inl _ => .error s!"Parameter type mismatch, parameter {name}"
+
+private def bindParamsLoop (st : RuntimeState)
+    (pairs : List (ParamDecl × Sum Num Name)) : Except String RuntimeState :=
+  match pairs with
+  | [] => .ok st
+  | (param, arg) :: rest => do
+      let st ← bindParam st param arg
+      bindParamsLoop st rest
+
 def bindParams (st : RuntimeState) (params : List ParamDecl) (args : List (Sum Num Name)) :
-    Except String RuntimeState := do
+    Except String RuntimeState :=
   if params.length != args.length then
-    throw "Parameter number mismatch"
+    .error "Parameter number mismatch"
   else
-    let mut st := st
-    for pair in params.zip args do
-      let (param, arg) := pair
-      match param, arg with
-      | .scalar name, .inl n =>
-          match st.frames with
-          | frame :: rest =>
-              st := { st with frames :=
-                { frame with scalars := assocSet frame.scalars name n } :: rest }
-          | [] => throw "internal error: missing call frame"
-      | .array name, .inr actual =>
-          let (st1, srcId) := ensureArrayId st actual
-          let (st2, dstId) := freshArray st1
-          let copied := getArray st2 srcId
-          st := setArray st2 dstId copied
-          match st.frames with
-          | frame :: rest =>
-              st := { st with frames :=
-                { frame with arrays := assocSet frame.arrays name dstId } :: rest }
-          | [] => throw "internal error: missing call frame"
-      | .scalar name, .inr _ => throw s!"Parameter type mismatch, parameter {name}"
-      | .array name, .inl _ =>
-          throw s!"Parameter type mismatch, parameter {name}"
-    return st
+    bindParamsLoop st (params.zip args)
+
+/-! ### Runtime-state preservation facts used by semantics equivalence proofs -/
+
+theorem lookupFunction_setArray (st : RuntimeState) (id : ArrayId) (a : BcArray)
+    (name : Name) :
+    lookupFunction (setArray st id a) name = lookupFunction st name := by
+  rfl
+
+private theorem lookupFunction_freshArray (st : RuntimeState) (name : Name) :
+    lookupFunction (freshArray st).1 name = lookupFunction st name := by
+  rfl
+
+theorem lookupFunction_ensureArrayId (st : RuntimeState) (arrayName name : Name) :
+    lookupFunction (ensureArrayId st arrayName).1 name = lookupFunction st name := by
+  simp [ensureArrayId, lookupFunction]
+  split <;> simp [ensureGlobalArray, freshArray]
+  split <;> simp
+
+theorem lookupFunction_writeLValueTarget (st : RuntimeState) (target : LValueTarget)
+    (value : Num) (name : Name) :
+    lookupFunction (writeLValueTarget st target value) name = lookupFunction st name := by
+  cases target with
+  | scalar n =>
+      simp [writeLValueTarget, setScalar, lookupFunction]
+      cases updateScalarInFrames st.frames n value <;> rfl
+  | special v =>
+      cases v <;> simp [writeLValueTarget, assignSpecial, lookupFunction]
+  | arrayElem id idx =>
+      simp [writeLValueTarget, setArrayElem, setArray, lookupFunction]
+
+theorem lookupFunction_bumpLValueTarget (st : RuntimeState) (target : LValueTarget)
+    (up : Bool) (name : Name) :
+    lookupFunction (bumpLValueTarget st target up).1 name = lookupFunction st name := by
+  cases target with
+  | scalar n => simp [bumpLValueTarget, lookupFunction_writeLValueTarget]
+  | special v => cases v <;> simp [bumpLValueTarget, lookupFunction]
+  | arrayElem id idx => simp [bumpLValueTarget, lookupFunction_writeLValueTarget]
+
+theorem lookupFunction_appendOutputChar (st : RuntimeState) (c : Char) (name : Name) :
+    lookupFunction (appendOutputChar st c) name = lookupFunction st name := by
+  unfold appendOutputChar lookupFunction
+  split <;> simp
+  split <;> simp
+
+theorem lookupFunction_foldl_appendOutputChar (chars : List Char)
+    (st : RuntimeState) (name : Name) :
+    lookupFunction (chars.foldl appendOutputChar st) name = lookupFunction st name := by
+  induction chars generalizing st with
+  | nil => rfl
+  | cons c rest ih => simp [List.foldl, ih, lookupFunction_appendOutputChar]
+
+theorem lookupFunction_appendOutput (st : RuntimeState) (s : String) (name : Name) :
+    lookupFunction (appendOutput st s) name = lookupFunction st name := by
+  simp [appendOutput, lookupFunction_foldl_appendOutputChar]
+
+theorem lookupFunction_printNumLine (st : RuntimeState) (n : Num) (name : Name) :
+    lookupFunction (printNumLine st n) name = lookupFunction st name := by
+  simp [printNumLine, printNumNoNewline, lookupFunction_appendOutput]
+
+theorem stopped_setFunction (st : RuntimeState) (defn : FunDef) :
+    (setFunction st defn).stopped = st.stopped := by
+  rfl
+
+theorem stopped_setArray (st : RuntimeState) (id : ArrayId) (a : BcArray) :
+    (setArray st id a).stopped = st.stopped := by
+  rfl
+
+private theorem stopped_freshArray (st : RuntimeState) :
+    (freshArray st).1.stopped = st.stopped := by
+  rfl
+
+theorem stopped_ensureArrayId (st : RuntimeState) (arrayName : Name) :
+    (ensureArrayId st arrayName).1.stopped = st.stopped := by
+  simp [ensureArrayId]
+  split <;> simp [ensureGlobalArray, freshArray]
+  split <;> simp
+
+theorem stopped_writeLValueTarget (st : RuntimeState) (target : LValueTarget)
+    (value : Num) :
+    (writeLValueTarget st target value).stopped = st.stopped := by
+  cases target with
+  | scalar n =>
+      simp [writeLValueTarget, setScalar]
+      cases updateScalarInFrames st.frames n value <;> rfl
+  | special v =>
+      cases v <;> simp [writeLValueTarget, assignSpecial]
+  | arrayElem id idx =>
+      simp [writeLValueTarget, setArrayElem, setArray]
+
+theorem stopped_bumpLValueTarget (st : RuntimeState) (target : LValueTarget)
+    (up : Bool) :
+    (bumpLValueTarget st target up).1.stopped = st.stopped := by
+  cases target with
+  | scalar n => simp [bumpLValueTarget, stopped_writeLValueTarget]
+  | special v => cases v <;> simp [bumpLValueTarget]
+  | arrayElem id idx => simp [bumpLValueTarget, stopped_writeLValueTarget]
+
+theorem stopped_appendOutputChar (st : RuntimeState) (c : Char) :
+    (appendOutputChar st c).stopped = st.stopped := by
+  unfold appendOutputChar
+  split <;> simp
+  split <;> simp
+
+theorem stopped_foldl_appendOutputChar (chars : List Char) (st : RuntimeState) :
+    (chars.foldl appendOutputChar st).stopped = st.stopped := by
+  induction chars generalizing st with
+  | nil => rfl
+  | cons c rest ih => simp [List.foldl, ih, stopped_appendOutputChar]
+
+theorem stopped_appendOutput (st : RuntimeState) (s : String) :
+    (appendOutput st s).stopped = st.stopped := by
+  simp [appendOutput, stopped_foldl_appendOutputChar]
+
+theorem stopped_printNumLine (st : RuntimeState) (n : Num) :
+    (printNumLine st n).stopped = st.stopped := by
+  simp [printNumLine, printNumNoNewline, stopped_appendOutput]
+
+private theorem stopped_bindAutoDecl (st : RuntimeState) (decl : ParamDecl) :
+    (bindAutoDecl st decl).stopped = st.stopped := by
+  unfold bindAutoDecl
+  cases hframes : st.frames with
+  | nil =>
+      cases decl <;> simp
+  | cons frame rest =>
+      cases decl <;> simp [hframes, freshArray]
+
+theorem stopped_bindAutoDecls (decls : List ParamDecl) (st : RuntimeState) :
+    (bindAutoDecls st decls).stopped = st.stopped := by
+  unfold bindAutoDecls
+  induction decls generalizing st with
+  | nil => rfl
+  | cons decl rest ih =>
+      simp [List.foldl]
+      exact (ih (bindAutoDecl st decl)).trans (stopped_bindAutoDecl st decl)
+
+private theorem bindParam_lookupFunction {st st' : RuntimeState}
+    {param : ParamDecl} {arg : Sum Num Name} {name : Name}
+    (h : bindParam st param arg = .ok st') :
+    lookupFunction st' name = lookupFunction st name := by
+  cases param with
+  | scalar paramName =>
+      cases arg with
+      | inl n =>
+          cases hframes : st.frames with
+          | nil => simp [bindParam, hframes] at h
+          | cons frame frames =>
+              simp [bindParam, hframes] at h
+              cases h
+              rfl
+      | inr actual =>
+          simp [bindParam] at h
+  | array paramName =>
+      cases arg with
+      | inl n =>
+          simp [bindParam] at h
+      | inr actual =>
+          let arr := ensureArrayId st actual
+          let fresh := freshArray arr.1
+          let stBound :=
+            setArray fresh.1 fresh.2 (getArray fresh.1 arr.2)
+          change
+            (match stBound.frames with
+            | frame :: rest =>
+                Except.ok
+                  { stBound with frames :=
+                    { frame with arrays := assocSet frame.arrays paramName fresh.2 } :: rest }
+            | [] => Except.error "internal error: missing call frame") = .ok st' at h
+          cases hframes : stBound.frames with
+          | nil => simp [hframes] at h
+          | cons frame frames =>
+              simp [hframes] at h
+              cases h
+              change lookupFunction stBound name = lookupFunction st name
+              simp [stBound, arr, fresh, lookupFunction_ensureArrayId, lookupFunction_setArray,
+                lookupFunction_freshArray]
+
+private theorem bindParamsLoop_lookupFunction {pairs : List (ParamDecl × Sum Num Name)}
+    {st st' : RuntimeState} {name : Name}
+    (h : bindParamsLoop st pairs = .ok st') :
+    lookupFunction st' name = lookupFunction st name := by
+  induction pairs generalizing st with
+  | nil =>
+      simp [bindParamsLoop] at h
+      cases h
+      rfl
+  | cons pair rest ih =>
+      rcases pair with ⟨param, arg⟩
+      cases hparam : bindParam st param arg with
+      | error msg =>
+          simp [bindParamsLoop, hparam] at h
+          cases h
+      | ok st₁ =>
+          have htail : bindParamsLoop st₁ rest = .ok st' := by
+            simpa [bindParamsLoop, hparam] using h
+          have hih := ih htail
+          have hhead := bindParam_lookupFunction (name := name) hparam
+          exact hih.trans hhead
+
+theorem bindParams_lookupFunction {st st' : RuntimeState}
+    {params : List ParamDecl} {args : List (Sum Num Name)} {name : Name}
+    (h : bindParams st params args = .ok st') :
+    lookupFunction st' name = lookupFunction st name := by
+  unfold bindParams at h
+  by_cases hlen : params.length = args.length
+  · simp [hlen] at h
+    exact bindParamsLoop_lookupFunction h
+  · simp [hlen] at h
+
+private theorem bindParam_stopped {st st' : RuntimeState}
+    {param : ParamDecl} {arg : Sum Num Name}
+    (h : bindParam st param arg = .ok st') :
+    st'.stopped = st.stopped := by
+  cases param with
+  | scalar paramName =>
+      cases arg with
+      | inl n =>
+          cases hframes : st.frames with
+          | nil => simp [bindParam, hframes] at h
+          | cons frame frames =>
+              simp [bindParam, hframes] at h
+              cases h
+              rfl
+      | inr actual =>
+          simp [bindParam] at h
+  | array paramName =>
+      cases arg with
+      | inl n =>
+          simp [bindParam] at h
+      | inr actual =>
+          let arr := ensureArrayId st actual
+          let fresh := freshArray arr.1
+          let stBound :=
+            setArray fresh.1 fresh.2 (getArray fresh.1 arr.2)
+          change
+            (match stBound.frames with
+            | frame :: rest =>
+                Except.ok
+                  { stBound with frames :=
+                    { frame with arrays := assocSet frame.arrays paramName fresh.2 } :: rest }
+            | [] => Except.error "internal error: missing call frame") = .ok st' at h
+          cases hframes : stBound.frames with
+          | nil => simp [hframes] at h
+          | cons frame frames =>
+              simp [hframes] at h
+              cases h
+              change stBound.stopped = st.stopped
+              calc
+                stBound.stopped = fresh.1.stopped := by
+                  simp [stBound, stopped_setArray]
+                _ = arr.1.stopped := stopped_freshArray arr.1
+                _ = st.stopped := stopped_ensureArrayId st actual
+
+private theorem bindParamsLoop_stopped {pairs : List (ParamDecl × Sum Num Name)}
+    {st st' : RuntimeState}
+    (h : bindParamsLoop st pairs = .ok st') :
+    st'.stopped = st.stopped := by
+  induction pairs generalizing st with
+  | nil =>
+      simp [bindParamsLoop] at h
+      cases h
+      rfl
+  | cons pair rest ih =>
+      rcases pair with ⟨param, arg⟩
+      cases hparam : bindParam st param arg with
+      | error msg =>
+          simp [bindParamsLoop, hparam] at h
+          cases h
+      | ok st₁ =>
+          have htail : bindParamsLoop st₁ rest = .ok st' := by
+            simpa [bindParamsLoop, hparam] using h
+          exact (ih htail).trans (bindParam_stopped hparam)
+
+theorem stopped_bindParams {st st' : RuntimeState}
+    {params : List ParamDecl} {args : List (Sum Num Name)}
+    (h : bindParams st params args = .ok st') :
+    st'.stopped = st.stopped := by
+  unfold bindParams at h
+  by_cases hlen : params.length = args.length
+  · simp [hlen] at h
+    exact bindParamsLoop_stopped h
+  · simp [hlen] at h
+
+theorem lookupFunction_bindAutoDecl (st : RuntimeState) (decl : ParamDecl) (name : Name) :
+    lookupFunction (bindAutoDecl st decl) name = lookupFunction st name := by
+  unfold bindAutoDecl
+  cases decl with
+  | scalar n =>
+      cases hframes : st.frames <;> simp [lookupFunction]
+  | array n =>
+      cases hframes : st.frames <;> simp [hframes, freshArray, lookupFunction]
+
+theorem lookupFunction_bindAutoDecls (st : RuntimeState) (decls : List ParamDecl)
+    (name : Name) :
+    lookupFunction (bindAutoDecls st decls) name = lookupFunction st name := by
+  unfold bindAutoDecls
+  induction decls generalizing st with
+  | nil => rfl
+  | cons decl rest ih =>
+      simp [List.foldl]
+      rw [ih, lookupFunction_bindAutoDecl]
 
 end Bc

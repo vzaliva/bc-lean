@@ -614,3 +614,97 @@ review also requested a focused unit test for the GNU bc manual example that
 - Renamed the shared control outcome from `Control.stop` to `Control.quit`, so
   the internal control-flow name matches the source construct.
 - Added `tests/eval/local/quit-if-false-comparison.b` with an AST golden.
+
+---
+
+## Step 13 — Big-step ↔ small-step equivalence theorem (in progress)
+
+**Agent:** Claude Code (Claude Opus 4.8, 1M context)
+**Duration:** ~1 session (review + build cleanup + backward-direction reduction
+and infrastructure). The theorem is **not yet fully closed** — one isolated
+`sorry` remains.
+
+### Request
+
+> We are trying to prove equivalence between big- and small-step semantics.
+> Review the current state and complete this proof.
+
+This is the headline metatheorem (`RunResult`-level agreement between
+`Bc.BigStep` and `Bc.SmallStep`): if one evaluator reaches a final result with
+some fuel, the other reaches the same final result with some fuel — fuel-
+insensitive, because the two fuels measure different things (big-step recursive
+calls vs. individual small-step transitions).
+
+### Starting state (prior, uncommitted work)
+
+A substantial **forward direction** (big-step ⟹ small-step) already existed
+under `Bc/BigSmall/`, built on relational finite-run closures:
+
+- `Bc/BigSmall/Run.lean` — `ExprRuns/LValRuns/ArgsRuns/StmtRuns/BodyRuns/ConfigRuns`
+  (a stepper reaches a final outcome in finitely many executable steps), with
+  `*.to_fuel` / `*.of_fuel` bridges and ~40 `lift_*` context-composition lemmas.
+- `Bc/BigSmall/Forward.lean` — one large `forwardProps` (induction on big-step
+  fuel) establishing `evalX_to_XRuns` for every layer.
+- `Bc/BigSmall/{Expr,Bounds,Bridge,Fuel,Stopped}.lean` — supporting lemmas.
+- `Bc/BigSmall.lean` — the public `runProgram_iff` / `runProgramWithState_iff`,
+  with the **backward direction** (`small_to_big_runProgramWithState`) left as a
+  single `sorry`.
+
+### This session's work
+
+1. **Build cleanup.** Four scratch files in `Bc/BigSmall/` (incomplete pre-refactor
+   drafts of the backward direction, one carrying `sorry`s) were being globbed
+   into the build (`lean_lib Bc` uses `.submodules`) and breaking `lake build`.
+   Renamed them `*.lean.scratch` (preserved, not deleted). `lake build` is green.
+
+2. **Reduced the backward direction to a single lemma** (`Bc/BigSmall/Backward.lean`):
+   - `runConfig_mono`, `runConfig_final_unique`, `runProgramWithState_final_unique`
+     — the small-step evaluator's final result is unique, since `step` is a pure
+     function (fuel only iterates it).
+   - `small_to_big_runProgramWithState` is now **fully proved modulo one fact**,
+     via *forward + small-step determinism*: a terminating small run forces big-
+     step termination with *some* final result, the forward direction reproduces
+     it on the small side, and determinism pins it to the given result. The one
+     remaining obligation is `termination_transfer` (a finite `ConfigRuns` ⟹ the
+     big-step evaluator does not run out of fuel for some budget).
+
+3. **Residual-term big-step interpreter** (`Bc/BigSmall/Residual.lean`):
+   `evalExprTerm / evalRelChainTerm / evalLValTerm / evalArgTerms / evalStmtTerm /
+   evalBodyTerm`, a fuel-bounded big-step evaluator over the *residual* small-step
+   terms (`.value`, `.assignTarget`, `.activeCall`, `.loopBody`, …), mirroring the
+   `stepX` functions exactly. This is the foundation for proving the backward
+   direction by structural induction over `*Runs` derivations rather than by
+   per-constructor inversion lemmas.
+
+4. **Fuel-monotonicity of the residual interpreter** (`Bc/BigSmall/BackwardSim.lean`,
+   `ResMonoProps` / `resMonoProps`) — proven; `grind` (with all mutual induction
+   hypotheses in context and both `NotFuel` unfoldings) discharges every case
+   except the 4-deep `.call` nest, handled by lifting the `evalArgTerms` step
+   manually.
+
+Net effect: the entire `↔` now rests on one isolated, well-understood lemma
+(`termination_transfer`), with its supporting determinism machinery and the
+residual-interpreter foundation proven and compiling. Progress is monotonic — the
+single `sorry` is strictly more localized than the original whole-direction gap.
+
+### What remains (scoped for continuation)
+
+`termination_transfer` needs the rest of a backward simulation, built on the
+residual interpreter:
+
+- **anti-evaluation** — "one small step preserves residual big-step eval"
+  (`stepX st e = .next st' e' → evalXTerm fb st' e' = r → ∃ fb2, evalXTerm fb2 st e = r`);
+  mutual, manual (the existential-fuel reconstruction does not automate).
+- **backward** — `XRuns st e o → ∃ fb, evalXTerm fb st e = exprFromOutcome o`
+  by induction on the `*Runs` derivation + anti-evaluation.
+- **mirror** — `evalXTerm n (ofX source) → ∃ m, Bc.evalX m source` converges;
+  complicated by `for` desugaring to `.seq (.eval) (.forCheck)` and the
+  `.loopBody` residual loop representation (fuel does not match source).
+- **config assembly** — `ConfigRuns` decompose per top-item → `BodyRuns` →
+  (backward + mirror) → `evalStmts` converges → `evalProgramItems` converges.
+
+### Verification
+
+`lake build` green; `make test` unaffected. The only `sorry` in the tree is
+`Bc/BigSmall/Backward.lean : termination_transfer`. The two new completed
+modules (`Residual.lean`, `BackwardSim.lean`) are `sorry`-free and warning-free.

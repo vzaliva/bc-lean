@@ -113,6 +113,11 @@ theorem evalLValTerm_mono {n m st lv r} (hnm : n ≤ m)
     (h : evalLValTerm n st lv = r) (hr : EvalResultNotFuel r) : evalLValTerm m st lv = r :=
   (resMonoProps n).lval hnm h hr
 
+theorem evalRelChainTerm_mono {n m st left rest r} (hnm : n ≤ m)
+    (h : evalRelChainTerm n st left rest = r) (hr : EvalResultNotFuel r) :
+    evalRelChainTerm m st left rest = r :=
+  (resMonoProps n).rel hnm h hr
+
 theorem evalArgTerms_mono {n m st a r} (hnm : n ≤ m)
     (h : evalArgTerms n st a = r) (hr : EvalResultNotFuel r) : evalArgTerms m st a = r :=
   (resMonoProps n).args hnm h hr
@@ -124,6 +129,54 @@ theorem evalStmtTerm_mono {n m st s r} (hnm : n ≤ m)
 theorem evalBodyTerm_mono {n m st b r} (hnm : n ≤ m)
     (h : evalBodyTerm n st b = r) (hr : ResultNotFuel r) : evalBodyTerm m st b = r :=
   (resMonoProps n).body hnm h hr
+
+/-! ### The residual interpreter never produces a `.normal` control escape -/
+
+structure ResNoNormalProps (n : Nat) : Prop where
+  expr : ∀ {st e st'}, evalExprTerm n st e ≠ .control st' .normal
+  rel : ∀ {st left rest st'}, evalRelChainTerm n st left rest ≠ .control st' .normal
+  lval : ∀ {st lv st' c}, evalLValTerm n st lv ≠ .control st' c
+  args : ∀ {st as st'}, evalArgTerms n st as ≠ .control st' .normal
+
+private theorem resNoNormalProps : ∀ n, ResNoNormalProps n := by
+  intro n
+  induction n with
+  | zero =>
+      exact
+        { expr := by intro st e st' h; simp [evalExprTerm] at h
+          rel := by intro st left rest st' h; simp [evalRelChainTerm] at h
+          lval := by intro st lv st' c h; simp [evalLValTerm] at h
+          args := by intro st as st' h; simp [evalArgTerms] at h }
+  | succ k ih =>
+      have he := @ResNoNormalProps.expr k ih
+      have hrel := @ResNoNormalProps.rel k ih
+      have hl := @ResNoNormalProps.lval k ih
+      have ha := @ResNoNormalProps.args k ih
+      refine ⟨?_, ?_, ?_, ?_⟩
+      · intro st e st' h
+        cases e <;> simp only [evalExprTerm] at h <;>
+          grind
+      · intro st left rest st' h
+        cases rest <;> simp only [evalRelChainTerm] at h <;>
+          grind
+      · intro st lv st' c h
+        cases lv <;> simp only [evalLValTerm] at h <;>
+          grind
+      · intro st as st' h
+        match as with
+        | [] => simp only [evalArgTerms] at h; cases h
+        | .expr e :: rest => simp only [evalArgTerms] at h; grind
+        | .arrayRef nm :: rest => simp only [evalArgTerms] at h; grind
+
+theorem evalExprTerm_control_ne_normal {n st e st' c}
+    (h : evalExprTerm n st e = .control st' c) : c ≠ .normal := by
+  intro hc
+  subst hc
+  exact (resNoNormalProps n).expr h
+
+theorem evalLValTerm_no_control {n st lv st' c} :
+    evalLValTerm n st lv ≠ .control st' c :=
+  (resNoNormalProps n).lval
 
 end BigSmall
 

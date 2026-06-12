@@ -617,12 +617,12 @@ review also requested a focused unit test for the GNU bc manual example that
 
 ---
 
-## Step 13 — Big-step ↔ small-step equivalence theorem (in progress)
+## Step 13 — Big-step ↔ small-step equivalence theorem
 
-**Agent:** Claude Code (Claude Opus 4.8, 1M context)
-**Duration:** ~1 session (review + build cleanup + backward-direction reduction
-and infrastructure). The theorem is **not yet fully closed** — one isolated
-`sorry` remains.
+**Agent:** Claude Code (Claude Opus 4.8 1M / Fable 5 xhigh)
+**Duration:** ~2 sessions (review + build cleanup + backward-direction reduction
+and infrastructure; then the full backward simulation). The theorem is
+**fully proven** — no `sorry`, no custom axioms.
 
 ### Request
 
@@ -682,29 +682,51 @@ under `Bc/BigSmall/`, built on relational finite-run closures:
    except the 4-deep `.call` nest, handled by lifting the `evalArgTerms` step
    manually.
 
-Net effect: the entire `↔` now rests on one isolated, well-understood lemma
-(`termination_transfer`), with its supporting determinism machinery and the
-residual-interpreter foundation proven and compiling. Progress is monotonic — the
-single `sorry` is strictly more localized than the original whole-direction gap.
+Net effect of session 1: the entire `↔` rested on one isolated, well-understood
+lemma (`termination_transfer`), with its supporting determinism machinery and
+the residual-interpreter foundation proven and compiling.
 
-### What remains (scoped for continuation)
+### Session 2: closing `termination_transfer` (the backward simulation)
 
-`termination_transfer` needs the rest of a backward simulation, built on the
-residual interpreter:
+The remaining lemma was discharged by completing the backward simulation on
+top of the residual interpreter:
 
-- **anti-evaluation** — "one small step preserves residual big-step eval"
-  (`stepX st e = .next st' e' → evalXTerm fb st' e' = r → ∃ fb2, evalXTerm fb2 st e = r`);
-  mutual, manual (the existential-fuel reconstruction does not automate).
-- **backward** — `XRuns st e o → ∃ fb, evalXTerm fb st e = exprFromOutcome o`
-  by induction on the `*Runs` derivation + anti-evaluation.
-- **mirror** — `evalXTerm n (ofX source) → ∃ m, Bc.evalX m source` converges;
-  complicated by `for` desugaring to `.seq (.eval) (.forCheck)` and the
-  `.loopBody` residual loop representation (fuel does not match source).
-- **config assembly** — `ConfigRuns` decompose per top-item → `BodyRuns` →
-  (backward + mirror) → `evalStmts` converges → `evalProgramItems` converges.
+- **Supporting facts in `Forward.lean` (extended).** De-privatized the
+  step-shape lemmas for reuse; added `stepStmt_control_ne_normal` /
+  `stepBody_control_ne_normal` (statement steps never escape with a `.normal`
+  control), `stepArgs_next/values_lookupFunction` (argument evaluation
+  preserves function lookups), and `stepExpr_value_inv` /
+  `stepLVal_target_inv` (a `.value`/`.target` step outcome only arises from
+  the literal value/target term) — all via the declarative `StepX` relations.
+- **`Bc/BigSmall/SourceMono.lean` (new).** Fuel monotonicity for all twelve
+  source big-step evaluators plus `evalTopItem`/`evalProgramItems`, by the
+  same `grind`-driven sweep as the residual interpreter's monotonicity.
+- **`Bc/BigSmall/AntiEval.lean` (new, ~1900 lines).** The heart of the
+  backward simulation: *anti-evaluation*. For each layer, if `stepX st t`
+  produces an outcome whose continuation evaluates (residually) to a final
+  result, then `t` itself evaluates to that result with some fuel. Proven by
+  mutual structural induction over residual terms, one case per step arm,
+  with a uniform decode (`rw [stepX]`-shape lemmas + sub-outcome casing) and
+  rebuild (controlled one-step unfolds via an `unfold_eval` macro + mono
+  rewrites) recipe. From this, `ExprRuns/StmtRuns/BodyRuns.to_eval`: every
+  finite small-step run is reproduced by the residual interpreter.
+- **`Bc/BigSmall/Mirror.lean` (new, ~1400 lines).** The *mirror*: on
+  source-shaped terms, the residual interpreter agrees with the source
+  big-step evaluator (`∃`-fuel both ways around the loop desugarings). The
+  `MirrorProps` induction on residual fuel carries extra statements for the
+  loop shapes (`loopBody`/`forCheck`/`forUpdate`), active call bodies, and
+  flattened statement groups (`stmtsApp`), since small-step unfolds loops
+  into residual forms with no source counterpart.
+- **Assembly in `BigSmall.lean`.** `ConfigRuns.body_split` decomposes a
+  finite top-level run over a quit-free statement group into a `BodyRuns` of
+  the group plus a run of the remaining program; `termination_transfer` then
+  follows by induction over the program, chaining `BodyRuns.to_eval`,
+  `mirror_stmts`, and the source monotonicity lemmas.
 
 ### Verification
 
-`lake build` green; `make test` unaffected. The only `sorry` in the tree is
-`Bc/BigSmall/Backward.lean : termination_transfer`. The two new completed
-modules (`Residual.lean`, `BackwardSim.lean`) are `sorry`-free and warning-free.
+- `lake build` green across the tree; **zero `sorry`** anywhere.
+- `lean_verify` on `Bc.BigSmall.runProgram_iff` and
+  `Bc.BigSmall.runProgramWithState_iff`: depend only on the standard axioms
+  (`propext`, `Classical.choice`, `Quot.sound`).
+- `make test`: AST 40/40, big-step eval 39/39, small-step eval 39/39.

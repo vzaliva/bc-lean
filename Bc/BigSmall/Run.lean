@@ -628,47 +628,47 @@ theorem ExprRuns.lift_error_to_stmt {k : ExprTerm → StmtTerm}
       exact StmtRuns.stop (herror hstep) (by simp [StmtFinal])
   | next hstep _ ih => exact StmtRuns.next (hnext hstep) (ih hout)
 
-private theorem stepStmt_seq_next {st s second st' s'}
+theorem stepStmt_seq_next {st s second st' s'}
     (hstep : stepStmt st s = .next st' s') :
     stepStmt st (.seq s second) = .next st' (.seq s' second) := by
   cases s <;> simp_all [stepStmt]
 
-private theorem stepStmt_seq_done {st s second st'}
+theorem stepStmt_seq_done {st s second st'}
     (hstep : stepStmt st s = .done st') :
     stepStmt st (.seq s second) = .next st' second := by
   cases s <;> simp_all [stepStmt]
 
-private theorem stepStmt_seq_control {st s second st' c}
+theorem stepStmt_seq_control {st s second st' c}
     (hstep : stepStmt st s = .control st' c) :
     stepStmt st (.seq s second) = .control st' c := by
   cases s <;> simp_all [stepStmt]
 
-private theorem stepStmt_seq_error {st s second st' msg}
+theorem stepStmt_seq_error {st s second st' msg}
     (hstep : stepStmt st s = .runtimeError st' msg) :
     stepStmt st (.seq s second) = .runtimeError st' msg := by
   cases s <;> simp_all [stepStmt]
 
-private theorem stepStmt_loop_next {st body after st' body'}
+theorem stepStmt_loop_next {st body after st' body'}
     (hstep : stepStmt st body = .next st' body') :
     stepStmt st (.loopBody body after) = .next st' (.loopBody body' after) := by
   cases body <;> simp_all [stepStmt]
 
-private theorem stepStmt_loop_done {st body after st'}
+theorem stepStmt_loop_done {st body after st'}
     (hstep : stepStmt st body = .done st') :
     stepStmt st (.loopBody body after) = .next st' after := by
   cases body <;> simp_all [stepStmt]
 
-private theorem stepStmt_loop_break {st body after st'}
+theorem stepStmt_loop_break {st body after st'}
     (hstep : stepStmt st body = .control st' .break) :
     stepStmt st (.loopBody body after) = .done st' := by
   cases body <;> simp_all [stepStmt]
 
-private theorem stepStmt_loop_control {st body after st' c}
+theorem stepStmt_loop_control {st body after st' c}
     (hnot : c ≠ .break) (hstep : stepStmt st body = .control st' c) :
     stepStmt st (.loopBody body after) = .control st' c := by
   cases body <;> simp_all [stepStmt, hnot]
 
-private theorem stepStmt_loop_error {st body after st' msg}
+theorem stepStmt_loop_error {st body after st' msg}
     (hstep : stepStmt st body = .runtimeError st' msg) :
     stepStmt st (.loopBody body after) = .runtimeError st' msg := by
   cases body <;> simp_all [stepStmt]
@@ -710,7 +710,7 @@ theorem StmtRuns.lift_error_to_body {rest : List StmtTerm}
   | next hstep _ ih =>
       exact BodyRuns.next (by simp [stepBody, hstep]) (ih hout)
 
-private theorem stepBody_append_next {st pre rest st' pre'}
+theorem stepBody_append_next {st pre rest st' pre'}
     (hstep : stepBody st (.stmts pre) = .next st' (.stmts pre')) :
     stepBody st (.stmts (pre ++ rest)) = .next st' (.stmts (pre' ++ rest)) := by
   cases pre with
@@ -724,7 +724,7 @@ private theorem stepBody_append_next {st pre rest st' pre'}
       · rcases hstep with ⟨rfl, rfl⟩
         constructor <;> rfl
 
-private theorem stepBody_append_control {st pre rest st' c}
+theorem stepBody_append_control {st pre rest st' c}
     (hstep : stepBody st (.stmts pre) = .control st' c) :
     stepBody st (.stmts (pre ++ rest)) = .control st' c := by
   cases pre with
@@ -736,7 +736,7 @@ private theorem stepBody_append_control {st pre rest st' c}
       rcases hstep with ⟨rfl, rfl⟩
       constructor <;> rfl
 
-private theorem stepBody_append_error {st pre rest st' msg}
+theorem stepBody_append_error {st pre rest st' msg}
     (hstep : stepBody st (.stmts pre) = .runtimeError st' msg) :
     stepBody st (.stmts (pre ++ rest)) = .runtimeError st' msg := by
   cases pre with
@@ -748,7 +748,7 @@ private theorem stepBody_append_error {st pre rest st' msg}
       rcases hstep with ⟨rfl, rfl⟩
       constructor <;> rfl
 
-private theorem stepBody_append_next_exists {st pre rest st' body'}
+theorem stepBody_append_next_exists {st pre rest st' body'}
     (hstep : stepBody st (.stmts pre) = .next st' body') :
     ∃ pre', body' = .stmts pre' ∧
       stepBody st (.stmts (pre ++ rest)) = .next st' (.stmts (pre' ++ rest)) := by
@@ -763,7 +763,7 @@ private theorem stepBody_append_next_exists {st pre rest st' body'}
       · rcases hstep with ⟨rfl, rfl⟩
         exact ⟨_, rfl, by simp [stepBody, hstmt]⟩
 
-private theorem stepBody_cons_ne_done {st stmt rest st'} :
+theorem stepBody_cons_ne_done {st stmt rest st'} :
     stepBody st (.stmts (stmt :: rest)) ≠ .done st' := by
   simp [stepBody]
   cases stepStmt st stmt <;> simp

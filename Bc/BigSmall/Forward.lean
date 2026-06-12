@@ -71,40 +71,40 @@ private theorem resultNotFuel_of_eq {α : Type} {r r' : Result α}
   subst h
   exact hnf
 
-private theorem stepExpr_arrayAccess_next {name : Name} {st e st' e'}
+theorem stepExpr_arrayAccess_next {name : Name} {st e st' e'}
     (h : stepExpr st e = .next st' e') :
     stepExpr st (.arrayAccess name e) = .next st' (.arrayAccess name e') := by
   cases e <;> simp_all [stepExpr]
   all_goals first | rfl | (rcases h with ⟨hst, he⟩; subst hst; subst he; rfl)
 
-private theorem stepExpr_arrayAccess_control {name : Name} {st e st' c}
+theorem stepExpr_arrayAccess_control {name : Name} {st e st' c}
     (h : stepExpr st e = .control st' c) :
     stepExpr st (.arrayAccess name e) = .control st' c := by
   cases e <;> simp_all [stepExpr]
 
-private theorem stepExpr_arrayAccess_error {name : Name} {st e st' msg}
+theorem stepExpr_arrayAccess_error {name : Name} {st e st' msg}
     (h : stepExpr st e = .runtimeError st' msg) :
     stepExpr st (.arrayAccess name e) = .runtimeError st' msg := by
   cases e <;> simp_all [stepExpr]
 
-private theorem stepLVal_array_next {name : Name} {st e st' e'}
+theorem stepLVal_array_next {name : Name} {st e st' e'}
     (h : stepExpr st e = .next st' e') :
     stepLVal st (.array name e) = .next st' (.array name e') := by
   cases e <;> simp_all [stepLVal, stepExpr]
   all_goals first | rfl | (rcases h with ⟨hst, he⟩; subst hst; subst he; rfl)
 
-private theorem stepLVal_array_control {name : Name} {st e st' c}
+theorem stepLVal_array_control {name : Name} {st e st' c}
     (h : stepExpr st e = .control st' c) :
     stepLVal st (.array name e) =
       .runtimeError st' "control escaped from lvalue evaluation" := by
   cases e <;> simp_all [stepLVal, stepExpr]
 
-private theorem stepLVal_array_error {name : Name} {st e st' msg}
+theorem stepLVal_array_error {name : Name} {st e st' msg}
     (h : stepExpr st e = .runtimeError st' msg) :
     stepLVal st (.array name e) = .runtimeError st' msg := by
   cases e <;> simp_all [stepLVal, stepExpr]
 
-private theorem stepExpr_assign_lval_next {op : AssignOp} {rhs : ExprTerm}
+theorem stepExpr_assign_lval_next {op : AssignOp} {rhs : ExprTerm}
     {st lv st' lv'} (h : stepLVal st lv = .next st' lv') :
     stepExpr st (.assign lv op rhs) = .next st' (.assign lv' op rhs) := by
   cases lv with
@@ -134,7 +134,7 @@ private theorem stepExpr_assign_lval_next {op : AssignOp} {rhs : ExprTerm}
           ExprOutcome.next st' (.assign lv' op rhs)
       rw [h]
 
-private theorem stepExpr_assign_lval_error {op : AssignOp} {rhs : ExprTerm}
+theorem stepExpr_assign_lval_error {op : AssignOp} {rhs : ExprTerm}
     {st lv st' msg} (h : stepLVal st lv = .runtimeError st' msg) :
     stepExpr st (.assign lv op rhs) = .runtimeError st' msg := by
   cases lv with
@@ -164,56 +164,56 @@ private theorem stepExpr_assign_lval_error {op : AssignOp} {rhs : ExprTerm}
           ExprOutcome.runtimeError st' msg
       rw [h]
 
-private theorem stepExpr_assignTarget_rhs_next {target : LValueTarget} {op : AssignOp}
+theorem stepExpr_assignTarget_rhs_next {target : LValueTarget} {op : AssignOp}
     {st rhs st' rhs'} (h : stepExpr st rhs = .next st' rhs') :
     stepExpr st (.assignTarget target op rhs) = .next st' (.assignTarget target op rhs') := by
   cases rhs <;> simp_all [stepExpr]
   all_goals first | rfl | (rcases h with ⟨hst, he⟩; subst hst; subst he; rfl)
 
-private theorem stepExpr_assignTarget_rhs_control {target : LValueTarget} {op : AssignOp}
+theorem stepExpr_assignTarget_rhs_control {target : LValueTarget} {op : AssignOp}
     {st rhs st' c} (h : stepExpr st rhs = .control st' c) :
     stepExpr st (.assignTarget target op rhs) = .control st' c := by
   cases rhs <;> simp_all [stepExpr]
 
-private theorem stepExpr_assignTarget_rhs_error {target : LValueTarget} {op : AssignOp}
+theorem stepExpr_assignTarget_rhs_error {target : LValueTarget} {op : AssignOp}
     {st rhs st' msg} (h : stepExpr st rhs = .runtimeError st' msg) :
     stepExpr st (.assignTarget target op rhs) = .runtimeError st' msg := by
   cases rhs <;> simp_all [stepExpr]
 
-private theorem stepExpr_bin_lhs_next {op : BinOp} {rhs : ExprTerm}
+theorem stepExpr_bin_lhs_next {op : BinOp} {rhs : ExprTerm}
     {st lhs st' lhs'} (h : stepExpr st lhs = .next st' lhs') :
     stepExpr st (.bin op lhs rhs) = .next st' (.bin op lhs' rhs) := by
   cases lhs <;> simp_all [stepExpr]
   all_goals first | rfl | (rcases h with ⟨hst, he⟩; subst hst; subst he; rfl)
 
-private theorem stepExpr_bin_lhs_control {op : BinOp} {rhs : ExprTerm}
+theorem stepExpr_bin_lhs_control {op : BinOp} {rhs : ExprTerm}
     {st lhs st' c} (h : stepExpr st lhs = .control st' c) :
     stepExpr st (.bin op lhs rhs) = .control st' c := by
   cases lhs <;> simp_all [stepExpr]
 
-private theorem stepExpr_bin_lhs_error {op : BinOp} {rhs : ExprTerm}
+theorem stepExpr_bin_lhs_error {op : BinOp} {rhs : ExprTerm}
     {st lhs st' msg} (h : stepExpr st lhs = .runtimeError st' msg) :
     stepExpr st (.bin op lhs rhs) = .runtimeError st' msg := by
   cases lhs <;> simp_all [stepExpr]
 
-private theorem stepExpr_bin_rhs_next {op : BinOp} {left : Num}
+theorem stepExpr_bin_rhs_next {op : BinOp} {left : Num}
     {st rhs st' rhs'} (h : stepExpr st rhs = .next st' rhs') :
     stepExpr st (.bin op (.value left) rhs) = .next st' (.bin op (.value left) rhs') := by
   cases rhs <;> simp_all [stepExpr]
   all_goals first | rfl | (rcases h with ⟨hst, he⟩; subst hst; subst he; rfl)
 
-private theorem stepExpr_paren_next {st e st' e'}
+theorem stepExpr_paren_next {st e st' e'}
     (h : stepExpr st e = .next st' e') :
     stepExpr st (.paren e) = .next st' (.paren e') := by
   cases e <;> simp_all [stepExpr]
   all_goals first | rfl | (rcases h with ⟨hst, he⟩; subst hst; subst he; rfl)
 
-private theorem stepExpr_paren_control {st e st' c}
+theorem stepExpr_paren_control {st e st' c}
     (h : stepExpr st e = .control st' c) :
     stepExpr st (.paren e) = .control st' c := by
   cases e <;> simp_all [stepExpr]
 
-private theorem stepExpr_paren_error {st e st' msg}
+theorem stepExpr_paren_error {st e st' msg}
     (h : stepExpr st e = .runtimeError st' msg) :
     stepExpr st (.paren e) = .runtimeError st' msg := by
   cases e <;> simp_all [stepExpr]
@@ -243,18 +243,18 @@ private theorem ExprRuns.assignTarget_value_error {st target op rhsValue msg}
     ExprRuns st (.assignTarget target op (.value rhsValue)) (.runtimeError st msg) := by
   exact ExprRuns.runtimeError (by simp [stepExpr, h])
 
-private theorem stepExpr_builtin_arg_next {fn : Builtin} {st e st' e'}
+theorem stepExpr_builtin_arg_next {fn : Builtin} {st e st' e'}
     (h : stepExpr st e = .next st' e') :
     stepExpr st (.builtin fn (some e)) = .next st' (.builtin fn (some e')) := by
   cases e <;> simp_all [stepExpr]
   all_goals first | rfl | (rcases h with ⟨hst, he⟩; subst hst; subst he; rfl)
 
-private theorem stepExpr_builtin_arg_control {fn : Builtin} {st e st' c}
+theorem stepExpr_builtin_arg_control {fn : Builtin} {st e st' c}
     (h : stepExpr st e = .control st' c) :
     stepExpr st (.builtin fn (some e)) = .control st' c := by
   cases e <;> simp_all [stepExpr]
 
-private theorem stepExpr_builtin_arg_error {fn : Builtin} {st e st' msg}
+theorem stepExpr_builtin_arg_error {fn : Builtin} {st e st' msg}
     (h : stepExpr st e = .runtimeError st' msg) :
     stepExpr st (.builtin fn (some e)) = .runtimeError st' msg := by
   cases e <;> simp_all [stepExpr]
@@ -273,18 +273,18 @@ private theorem ExprRuns.builtin_value_error {st fn value msg}
     ExprRuns st (.builtin fn (some (.value value))) (.runtimeError st msg) := by
   exact ExprRuns.runtimeError (by simp [stepExpr, h])
 
-private theorem stepExpr_neg_next {st e st' e'}
+theorem stepExpr_neg_next {st e st' e'}
     (h : stepExpr st e = .next st' e') :
     stepExpr st (.neg e) = .next st' (.neg e') := by
   cases e <;> simp_all [stepExpr]
   all_goals first | rfl | (rcases h with ⟨hst, he⟩; subst hst; subst he; rfl)
 
-private theorem stepExpr_neg_control {st e st' c}
+theorem stepExpr_neg_control {st e st' c}
     (h : stepExpr st e = .control st' c) :
     stepExpr st (.neg e) = .control st' c := by
   cases e <;> simp_all [stepExpr]
 
-private theorem stepExpr_neg_error {st e st' msg}
+theorem stepExpr_neg_error {st e st' msg}
     (h : stepExpr st e = .runtimeError st' msg) :
     stepExpr st (.neg e) = .runtimeError st' msg := by
   cases e <;> simp_all [stepExpr]
@@ -293,7 +293,7 @@ private theorem ExprRuns.neg_value {st value} :
     ExprRuns st (.neg (.value value)) (.value st (Num.neg value)) := by
   exact ExprRuns.next (by simp [stepExpr]) ExprRuns.value
 
-private theorem stepExpr_bump_lval_next {op : UnOp} {st lv st' lv'}
+theorem stepExpr_bump_lval_next {op : UnOp} {st lv st' lv'}
     (h : stepLVal st lv = .next st' lv') :
     stepExpr st (.bump op lv) = .next st' (.bump op lv') := by
   cases lv with
@@ -323,7 +323,7 @@ private theorem stepExpr_bump_lval_next {op : UnOp} {st lv st' lv'}
           ExprOutcome.next st' (.bump op lv')
       rw [h]
 
-private theorem stepExpr_bump_lval_error {op : UnOp} {st lv st' msg}
+theorem stepExpr_bump_lval_error {op : UnOp} {st lv st' msg}
     (h : stepLVal st lv = .runtimeError st' msg) :
     stepExpr st (.bump op lv) = .runtimeError st' msg := by
   cases lv with
@@ -477,33 +477,33 @@ private theorem evalLValueTarget_ne_control {fuel st lv st' c} :
           next state value =>
             cases hindex : indexOfNum? value <;> simp [hindex]
 
-private theorem stepExpr_bin_rhs_control {op : BinOp} {left : Num}
+theorem stepExpr_bin_rhs_control {op : BinOp} {left : Num}
     {st rhs st' c} (h : stepExpr st rhs = .control st' c) :
     stepExpr st (.bin op (.value left) rhs) = .control st' c := by
   cases rhs <;> simp_all [stepExpr]
 
-private theorem stepExpr_bin_rhs_error {op : BinOp} {left : Num}
+theorem stepExpr_bin_rhs_error {op : BinOp} {left : Num}
     {st rhs st' msg} (h : stepExpr st rhs = .runtimeError st' msg) :
     stepExpr st (.bin op (.value left) rhs) = .runtimeError st' msg := by
   cases rhs <;> simp_all [stepExpr]
 
-private theorem stepExpr_rel_first_next {rest : List (RelOp × ExprTerm)}
+theorem stepExpr_rel_first_next {rest : List (RelOp × ExprTerm)}
     {st first st' first'} (h : stepExpr st first = .next st' first') :
     stepExpr st (.rel first rest) = .next st' (.rel first' rest) := by
   cases first <;> simp_all [stepExpr]
   all_goals first | rfl | (rcases h with ⟨hst, he⟩; subst hst; subst he; rfl)
 
-private theorem stepExpr_rel_first_control {rest : List (RelOp × ExprTerm)}
+theorem stepExpr_rel_first_control {rest : List (RelOp × ExprTerm)}
     {st first st' c} (h : stepExpr st first = .control st' c) :
     stepExpr st (.rel first rest) = .control st' c := by
   cases first <;> simp_all [stepExpr]
 
-private theorem stepExpr_rel_first_error {rest : List (RelOp × ExprTerm)}
+theorem stepExpr_rel_first_error {rest : List (RelOp × ExprTerm)}
     {st first st' msg} (h : stepExpr st first = .runtimeError st' msg) :
     stepExpr st (.rel first rest) = .runtimeError st' msg := by
   cases first <;> simp_all [stepExpr]
 
-private theorem stepExpr_rel_rhs_next {left : Num} {op : RelOp}
+theorem stepExpr_rel_rhs_next {left : Num} {op : RelOp}
     {tail : List (RelOp × ExprTerm)} {st rhs st' rhs'}
     (h : stepExpr st rhs = .next st' rhs') :
     stepExpr st (.rel (.value left) ((op, rhs) :: tail)) =
@@ -511,13 +511,13 @@ private theorem stepExpr_rel_rhs_next {left : Num} {op : RelOp}
   cases rhs <;> simp_all [stepExpr]
   all_goals first | rfl | (rcases h with ⟨hst, he⟩; subst hst; subst he; rfl)
 
-private theorem stepExpr_rel_rhs_control {left : Num} {op : RelOp}
+theorem stepExpr_rel_rhs_control {left : Num} {op : RelOp}
     {tail : List (RelOp × ExprTerm)} {st rhs st' c}
     (h : stepExpr st rhs = .control st' c) :
     stepExpr st (.rel (.value left) ((op, rhs) :: tail)) = .control st' c := by
   cases rhs <;> simp_all [stepExpr]
 
-private theorem stepExpr_rel_rhs_error {left : Num} {op : RelOp}
+theorem stepExpr_rel_rhs_error {left : Num} {op : RelOp}
     {tail : List (RelOp × ExprTerm)} {st rhs st' msg}
     (h : stepExpr st rhs = .runtimeError st' msg) :
     stepExpr st (.rel (.value left) ((op, rhs) :: tail)) = .runtimeError st' msg := by
@@ -548,172 +548,172 @@ private theorem LValRuns.array_value_error {st name idxNum msg}
     LValRuns st (.array name (.value idxNum)) (.runtimeError st msg) := by
   exact LValRuns.runtimeError (by simp [stepLVal, h])
 
-private theorem stepArgs_expr_head_next {rest : List ArgTerm} {st e st' e'}
+theorem stepArgs_expr_head_next {rest : List ArgTerm} {st e st' e'}
     (h : stepExpr st e = .next st' e') :
     stepArgs st (.expr e :: rest) = .next st' (.expr e' :: rest) := by
   cases e <;> simp_all [stepArgs, stepExpr]
   all_goals first | rfl | (rcases h with ⟨hst, he⟩; subst hst; subst he; rfl)
 
-private theorem stepArgs_expr_head_control {rest : List ArgTerm} {st e st' c}
+theorem stepArgs_expr_head_control {rest : List ArgTerm} {st e st' c}
     (h : stepExpr st e = .control st' c) :
     stepArgs st (.expr e :: rest) = .control st' c := by
   cases e <;> simp_all [stepArgs, stepExpr]
 
-private theorem stepArgs_expr_head_error {rest : List ArgTerm} {st e st' msg}
+theorem stepArgs_expr_head_error {rest : List ArgTerm} {st e st' msg}
     (h : stepExpr st e = .runtimeError st' msg) :
     stepArgs st (.expr e :: rest) = .runtimeError st' msg := by
   cases e <;> simp_all [stepArgs, stepExpr]
 
-private theorem stepArgs_expr_value_tail_next {value : Num} {st rest st' rest'}
+theorem stepArgs_expr_value_tail_next {value : Num} {st rest st' rest'}
     (h : stepArgs st rest = .next st' rest') :
     stepArgs st (.expr (.value value) :: rest) = .next st' (.expr (.value value) :: rest') := by
   simp [stepArgs, h]
 
-private theorem stepArgs_expr_value_tail_values {value : Num} {st rest st' values}
+theorem stepArgs_expr_value_tail_values {value : Num} {st rest st' values}
     (h : stepArgs st rest = .values st' values) :
     stepArgs st (.expr (.value value) :: rest) = .values st' (.inl value :: values) := by
   simp [stepArgs, h]
 
-private theorem stepArgs_expr_value_tail_control {value : Num} {st rest st' c}
+theorem stepArgs_expr_value_tail_control {value : Num} {st rest st' c}
     (h : stepArgs st rest = .control st' c) :
     stepArgs st (.expr (.value value) :: rest) = .control st' c := by
   simp [stepArgs, h]
 
-private theorem stepArgs_expr_value_tail_error {value : Num} {st rest st' msg}
+theorem stepArgs_expr_value_tail_error {value : Num} {st rest st' msg}
     (h : stepArgs st rest = .runtimeError st' msg) :
     stepArgs st (.expr (.value value) :: rest) = .runtimeError st' msg := by
   simp [stepArgs, h]
 
-private theorem stepArgs_arrayRef_tail_next {name : Name} {st rest st' rest'}
+theorem stepArgs_arrayRef_tail_next {name : Name} {st rest st' rest'}
     (h : stepArgs st rest = .next st' rest') :
     stepArgs st (.arrayRef name :: rest) = .next st' (.arrayRef name :: rest') := by
   simp [stepArgs, h]
 
-private theorem stepArgs_arrayRef_tail_values {name : Name} {st rest st' values}
+theorem stepArgs_arrayRef_tail_values {name : Name} {st rest st' values}
     (h : stepArgs st rest = .values st' values) :
     stepArgs st (.arrayRef name :: rest) = .values st' (.inr name :: values) := by
   simp [stepArgs, h]
 
-private theorem stepArgs_arrayRef_tail_control {name : Name} {st rest st' c}
+theorem stepArgs_arrayRef_tail_control {name : Name} {st rest st' c}
     (h : stepArgs st rest = .control st' c) :
     stepArgs st (.arrayRef name :: rest) = .control st' c := by
   simp [stepArgs, h]
 
-private theorem stepArgs_arrayRef_tail_error {name : Name} {st rest st' msg}
+theorem stepArgs_arrayRef_tail_error {name : Name} {st rest st' msg}
     (h : stepArgs st rest = .runtimeError st' msg) :
     stepArgs st (.arrayRef name :: rest) = .runtimeError st' msg := by
   simp [stepArgs, h]
 
-private theorem stepStmt_expr_next {original : Expr} {st e st' e'}
+theorem stepStmt_expr_next {original : Expr} {st e st' e'}
     (h : stepExpr st e = .next st' e') :
     stepStmt st (.expr original e) = .next st' (.expr original e') := by
   cases e <;> simp_all [stepStmt, stepExpr]
   all_goals first | (rcases h with ⟨rfl, rfl⟩; rfl) | rfl
 
-private theorem stepStmt_expr_control {original : Expr} {st e st' c}
+theorem stepStmt_expr_control {original : Expr} {st e st' c}
     (h : stepExpr st e = .control st' c) :
     stepStmt st (.expr original e) = .control st' c := by
   cases e <;> simp_all [stepStmt, stepExpr]
 
-private theorem stepStmt_expr_error {original : Expr} {st e st' msg}
+theorem stepStmt_expr_error {original : Expr} {st e st' msg}
     (h : stepExpr st e = .runtimeError st' msg) :
     stepStmt st (.expr original e) = .runtimeError st' msg := by
   cases e <;> simp_all [stepStmt, stepExpr]
 
-private theorem stepStmt_eval_next {st e st' e'}
+theorem stepStmt_eval_next {st e st' e'}
     (h : stepExpr st e = .next st' e') :
     stepStmt st (.eval e) = .next st' (.eval e') := by
   cases e <;> simp_all [stepStmt, stepExpr]
   all_goals first | (rcases h with ⟨rfl, rfl⟩; rfl) | rfl
 
-private theorem stepStmt_eval_control {st e st' c}
+theorem stepStmt_eval_control {st e st' c}
     (h : stepExpr st e = .control st' c) :
     stepStmt st (.eval e) = .control st' c := by
   cases e <;> simp_all [stepStmt, stepExpr]
 
-private theorem stepStmt_eval_error {st e st' msg}
+theorem stepStmt_eval_error {st e st' msg}
     (h : stepExpr st e = .runtimeError st' msg) :
     stepStmt st (.eval e) = .runtimeError st' msg := by
   cases e <;> simp_all [stepStmt, stepExpr]
 
-private theorem stepStmt_if_next {branch : StmtTerm} {st e st' e'}
+theorem stepStmt_if_next {branch : StmtTerm} {st e st' e'}
     (h : stepExpr st e = .next st' e') :
     stepStmt st (.ifThen e branch) = .next st' (.ifThen e' branch) := by
   cases e <;> simp_all [stepStmt, stepExpr]
   all_goals first | (rcases h with ⟨rfl, rfl⟩; rfl) | rfl
 
-private theorem stepStmt_if_control {branch : StmtTerm} {st e st' c}
+theorem stepStmt_if_control {branch : StmtTerm} {st e st' c}
     (h : stepExpr st e = .control st' c) :
     stepStmt st (.ifThen e branch) = .control st' c := by
   cases e <;> simp_all [stepStmt, stepExpr]
 
-private theorem stepStmt_if_error {branch : StmtTerm} {st e st' msg}
+theorem stepStmt_if_error {branch : StmtTerm} {st e st' msg}
     (h : stepExpr st e = .runtimeError st' msg) :
     stepStmt st (.ifThen e branch) = .runtimeError st' msg := by
   cases e <;> simp_all [stepStmt, stepExpr]
 
-private theorem stepStmt_while_next {source : Expr} {body : StmtTerm} {st e st' e'}
+theorem stepStmt_while_next {source : Expr} {body : StmtTerm} {st e st' e'}
     (h : stepExpr st e = .next st' e') :
     stepStmt st (.while source e body) = .next st' (.while source e' body) := by
   cases e <;> simp_all [stepStmt, stepExpr]
   all_goals first | (rcases h with ⟨rfl, rfl⟩; rfl) | rfl
 
-private theorem stepStmt_while_control {source : Expr} {body : StmtTerm} {st e st' c}
+theorem stepStmt_while_control {source : Expr} {body : StmtTerm} {st e st' c}
     (h : stepExpr st e = .control st' c) :
     stepStmt st (.while source e body) = .control st' c := by
   cases e <;> simp_all [stepStmt, stepExpr]
 
-private theorem stepStmt_while_error {source : Expr} {body : StmtTerm} {st e st' msg}
+theorem stepStmt_while_error {source : Expr} {body : StmtTerm} {st e st' msg}
     (h : stepExpr st e = .runtimeError st' msg) :
     stepStmt st (.while source e body) = .runtimeError st' msg := by
   cases e <;> simp_all [stepStmt, stepExpr]
 
-private theorem stepStmt_forCheck_next {source update : Expr} {body : StmtTerm} {st e st' e'}
+theorem stepStmt_forCheck_next {source update : Expr} {body : StmtTerm} {st e st' e'}
     (h : stepExpr st e = .next st' e') :
     stepStmt st (.forCheck source e update body) =
       .next st' (.forCheck source e' update body) := by
   cases e <;> simp_all [stepStmt, stepExpr]
   all_goals first | (rcases h with ⟨rfl, rfl⟩; rfl) | rfl
 
-private theorem stepStmt_forCheck_control {source update : Expr} {body : StmtTerm} {st e st' c}
+theorem stepStmt_forCheck_control {source update : Expr} {body : StmtTerm} {st e st' c}
     (h : stepExpr st e = .control st' c) :
     stepStmt st (.forCheck source e update body) = .control st' c := by
   cases e <;> simp_all [stepStmt, stepExpr]
 
-private theorem stepStmt_forCheck_error {source update : Expr} {body : StmtTerm} {st e st' msg}
+theorem stepStmt_forCheck_error {source update : Expr} {body : StmtTerm} {st e st' msg}
     (h : stepExpr st e = .runtimeError st' msg) :
     stepStmt st (.forCheck source e update body) = .runtimeError st' msg := by
   cases e <;> simp_all [stepStmt, stepExpr]
 
-private theorem stepStmt_forUpdate_next {source updateSource : Expr} {body : StmtTerm}
+theorem stepStmt_forUpdate_next {source updateSource : Expr} {body : StmtTerm}
     {st e st' e'} (h : stepExpr st e = .next st' e') :
     stepStmt st (.forUpdate source updateSource e body) =
       .next st' (.forUpdate source updateSource e' body) := by
   cases e <;> simp_all [stepStmt, stepExpr]
   all_goals first | (rcases h with ⟨rfl, rfl⟩; rfl) | rfl
 
-private theorem stepStmt_forUpdate_control {source updateSource : Expr} {body : StmtTerm}
+theorem stepStmt_forUpdate_control {source updateSource : Expr} {body : StmtTerm}
     {st e st' c} (h : stepExpr st e = .control st' c) :
     stepStmt st (.forUpdate source updateSource e body) = .control st' c := by
   cases e <;> simp_all [stepStmt, stepExpr]
 
-private theorem stepStmt_forUpdate_error {source updateSource : Expr} {body : StmtTerm}
+theorem stepStmt_forUpdate_error {source updateSource : Expr} {body : StmtTerm}
     {st e st' msg} (h : stepExpr st e = .runtimeError st' msg) :
     stepStmt st (.forUpdate source updateSource e body) = .runtimeError st' msg := by
   cases e <;> simp_all [stepStmt, stepExpr]
 
-private theorem stepStmt_return_next {st e st' e'}
+theorem stepStmt_return_next {st e st' e'}
     (h : stepExpr st e = .next st' e') :
     stepStmt st (.return (some e)) = .next st' (.return (some e')) := by
   cases e <;> simp_all [stepStmt, stepExpr]
   all_goals first | (rcases h with ⟨rfl, rfl⟩; rfl) | rfl
 
-private theorem stepStmt_return_control {st e st' c}
+theorem stepStmt_return_control {st e st' c}
     (h : stepExpr st e = .control st' c) :
     stepStmt st (.return (some e)) = .control st' c := by
   cases e <;> simp_all [stepStmt, stepExpr]
 
-private theorem stepStmt_return_error {st e st' msg}
+theorem stepStmt_return_error {st e st' msg}
     (h : stepExpr st e = .runtimeError st' msg) :
     stepStmt st (.return (some e)) = .runtimeError st' msg := by
   cases e <;> simp_all [stepStmt, stepExpr]
@@ -833,7 +833,7 @@ local macro "outcome_cases" : tactic =>
     | assumption
     | rfl)
 
-private theorem stepExprRel_lookupFunction (name : Name) (st : RuntimeState) :
+theorem stepExprRel_lookupFunction (name : Name) (st : RuntimeState) :
     ∀ {e o}, StepExpr st e o → ExprOutcomeLookup name st o := by
   apply @StepExpr.rec st
     (motive_1 := fun _ o _ => ExprOutcomeLookup name st o)
@@ -843,7 +843,7 @@ private theorem stepExprRel_lookupFunction (name : Name) (st : RuntimeState) :
     (motive_5 := fun _ o _ => BodyOutcomeLookup name st o)
   all_goals (intros; outcome_cases)
 
-private theorem stepLValRel_lookupFunction (name : Name) (st : RuntimeState) :
+theorem stepLValRel_lookupFunction (name : Name) (st : RuntimeState) :
     ∀ {lv o}, StepLVal st lv o → LValOutcomeLookup name st o := by
   apply @StepLVal.rec st
     (motive_1 := fun _ o _ => ExprOutcomeLookup name st o)
@@ -853,7 +853,7 @@ private theorem stepLValRel_lookupFunction (name : Name) (st : RuntimeState) :
     (motive_5 := fun _ o _ => BodyOutcomeLookup name st o)
   all_goals (intros; outcome_cases)
 
-private theorem stepArgsRel_lookupFunction (name : Name) (st : RuntimeState) :
+theorem stepArgsRel_lookupFunction (name : Name) (st : RuntimeState) :
     ∀ {args o}, StepArgs st args o → ArgsOutcomeLookup name st o := by
   apply @StepArgs.rec st
     (motive_1 := fun _ o _ => ExprOutcomeLookup name st o)
@@ -863,7 +863,7 @@ private theorem stepArgsRel_lookupFunction (name : Name) (st : RuntimeState) :
     (motive_5 := fun _ o _ => BodyOutcomeLookup name st o)
   all_goals (intros; outcome_cases)
 
-private theorem stepStmtRel_lookupFunction (name : Name) (st : RuntimeState) :
+theorem stepStmtRel_lookupFunction (name : Name) (st : RuntimeState) :
     ∀ {stmt o}, StepStmt st stmt o → StmtOutcomeLookup name st o := by
   apply @StepStmt.rec st
     (motive_1 := fun _ o _ => ExprOutcomeLookup name st o)
@@ -873,7 +873,7 @@ private theorem stepStmtRel_lookupFunction (name : Name) (st : RuntimeState) :
     (motive_5 := fun _ o _ => BodyOutcomeLookup name st o)
   all_goals (intros; outcome_cases)
 
-private theorem stepBodyRel_lookupFunction (name : Name) (st : RuntimeState) :
+theorem stepBodyRel_lookupFunction (name : Name) (st : RuntimeState) :
     ∀ {body o}, StepBody st body o → BodyOutcomeLookup name st o := by
   apply @StepBody.rec st
     (motive_1 := fun _ o _ => ExprOutcomeLookup name st o)
@@ -883,7 +883,7 @@ private theorem stepBodyRel_lookupFunction (name : Name) (st : RuntimeState) :
     (motive_5 := fun _ o _ => BodyOutcomeLookup name st o)
   all_goals (intros; outcome_cases)
 
-private theorem stepExpr_lookupFunction (name : Name) {st e o}
+theorem stepExpr_lookupFunction (name : Name) {st e o}
     (h : stepExpr st e = o) : ExprOutcomeLookup name st o := by
   by_cases hv : ExprTerm.isValue e = false
   · have hrel := stepExprRel_lookupFunction name st (stepExpr_complete (st := st) (e := e) hv)
@@ -893,7 +893,7 @@ private theorem stepExpr_lookupFunction (name : Name) {st e o}
     cases h
     simp [ExprOutcomeLookup]
 
-private theorem stepLVal_lookupFunction (name : Name) {st lv o}
+theorem stepLVal_lookupFunction (name : Name) {st lv o}
     (h : stepLVal st lv = o) : LValOutcomeLookup name st o := by
   by_cases hv : LValTerm.isTarget lv = false
   · have hrel := stepLValRel_lookupFunction name st
@@ -904,17 +904,17 @@ private theorem stepLVal_lookupFunction (name : Name) {st lv o}
     cases h
     simp [LValOutcomeLookup]
 
-private theorem stepArgs_lookupFunction (name : Name) {st args o}
+theorem stepArgs_lookupFunction (name : Name) {st args o}
     (h : stepArgs st args = o) : ArgsOutcomeLookup name st o := by
   have hrel := stepArgsRel_lookupFunction name st (stepArgs_complete (st := st) (a := args))
   simpa [h] using hrel
 
-private theorem stepStmt_lookupFunction (name : Name) {st stmt o}
+theorem stepStmt_lookupFunction (name : Name) {st stmt o}
     (h : stepStmt st stmt = o) : StmtOutcomeLookup name st o := by
   have hrel := stepStmtRel_lookupFunction name st (stepStmt_complete (st := st) (s := stmt))
   simpa [h] using hrel
 
-private theorem stepBody_lookupFunction (name : Name) {st body o}
+theorem stepBody_lookupFunction (name : Name) {st body o}
     (h : stepBody st body = o) : BodyOutcomeLookup name st o := by
   have hrel := stepBodyRel_lookupFunction name st (stepBody_complete (st := st) (b := body))
   simpa [h] using hrel
@@ -1051,7 +1051,7 @@ local macro "normal_cases" : tactic =>
     | (cases ‹StmtOutcome› <;> try cases ‹Control› <;> (normal_ss; done))
     | (cases ‹BodyOutcome› <;> try cases ‹Control› <;> (normal_ss; done)))
 
-private theorem stepExprRel_noNormal (st : RuntimeState) :
+theorem stepExprRel_noNormal (st : RuntimeState) :
     ∀ {e o}, StepExpr st e o → ExprOutcomeNoNormal o := by
   apply @StepExpr.rec st
     (motive_1 := fun _ o _ => ExprOutcomeNoNormal o)
@@ -1076,7 +1076,7 @@ private theorem stepExprRel_noNormal (st : RuntimeState) :
     | exact liftBodyStep_noNormal (by assumption)
     | normal_cases
 
-private theorem stepExpr_no_control_normal {st e st'}
+theorem stepExpr_no_control_normal {st e st'}
     (h : stepExpr st e = .control st' .normal) : False := by
   by_cases hv : ExprTerm.isValue e = false
   · have hrel := stepExprRel_noNormal st (stepExpr_complete (st := st) (e := e) hv)
@@ -1095,19 +1095,239 @@ private theorem ExprRuns.no_control_normal {st e st'}
   | runtimeError _ => cases hout
   | next _ _ ih => exact ih hout
 
-private theorem stepExpr_call_args_next {name : Name} {defn : FunDef} {st args st' args'}
+private theorem stepStmtRel_noNormal (st : RuntimeState) :
+    ∀ {s o}, StepStmt st s o → StmtOutcomeNoNormal o := by
+  apply @StepStmt.rec st
+    (motive_1 := fun _ o _ => ExprOutcomeNoNormal o)
+    (motive_2 := fun _ o _ => LValOutcomeNoNormal o)
+    (motive_3 := fun _ o _ => ArgsOutcomeNoNormal o)
+    (motive_4 := fun _ o _ => StmtOutcomeNoNormal o)
+    (motive_5 := fun _ o _ => BodyOutcomeNoNormal o)
+  all_goals
+    intros
+    first
+    | exact liftE_noNormal (by assumption)
+    | exact liftLE_noNormal (by intro st target; simp [ExprOutcomeNoNormal])
+    | exact liftAE_noNormal
+        (by intro st values; exact enterFunction_noNormal) (by assumption)
+    | exact liftActiveCall_noNormal (by assumption)
+    | exact liftArgsTail_noNormal (by assumption)
+    | exact liftExprArgs_noNormal (by assumption)
+    | exact liftExprStmt_noNormal (by assumption)
+    | exact liftLoopBody_noNormal (by assumption)
+    | exact liftSeq_noNormal (by assumption)
+    | exact liftBlock_noNormal (by assumption)
+    | exact liftBodyStep_noNormal (by assumption)
+    | normal_cases
+
+private theorem stepBodyRel_noNormal (st : RuntimeState) :
+    ∀ {b o}, StepBody st b o → BodyOutcomeNoNormal o := by
+  apply @StepBody.rec st
+    (motive_1 := fun _ o _ => ExprOutcomeNoNormal o)
+    (motive_2 := fun _ o _ => LValOutcomeNoNormal o)
+    (motive_3 := fun _ o _ => ArgsOutcomeNoNormal o)
+    (motive_4 := fun _ o _ => StmtOutcomeNoNormal o)
+    (motive_5 := fun _ o _ => BodyOutcomeNoNormal o)
+  all_goals
+    intros
+    first
+    | exact liftE_noNormal (by assumption)
+    | exact liftLE_noNormal (by intro st target; simp [ExprOutcomeNoNormal])
+    | exact liftAE_noNormal
+        (by intro st values; exact enterFunction_noNormal) (by assumption)
+    | exact liftActiveCall_noNormal (by assumption)
+    | exact liftArgsTail_noNormal (by assumption)
+    | exact liftExprArgs_noNormal (by assumption)
+    | exact liftExprStmt_noNormal (by assumption)
+    | exact liftLoopBody_noNormal (by assumption)
+    | exact liftSeq_noNormal (by assumption)
+    | exact liftBlock_noNormal (by assumption)
+    | exact liftBodyStep_noNormal (by assumption)
+    | normal_cases
+
+/-- Statement steps never produce the `.normal` control outcome. -/
+theorem stepStmt_control_ne_normal {st s st' c}
+    (h : stepStmt st s = .control st' c) : c ≠ .normal := by
+  have hrel := stepStmtRel_noNormal st (stepStmt_complete (st := st) (s := s))
+  rw [h] at hrel
+  simpa [StmtOutcomeNoNormal] using hrel
+
+/-- Body steps never produce the `.normal` control outcome. -/
+theorem stepBody_control_ne_normal {st b st' c}
+    (h : stepBody st b = .control st' c) : c ≠ .normal := by
+  have hrel := stepBodyRel_noNormal st (stepBody_complete (st := st) (b := b))
+  rw [h] at hrel
+  simpa [BodyOutcomeNoNormal] using hrel
+
+private def ExprOutcomeNoValue : ExprOutcome → Prop
+  | .value _ _ => False
+  | _ => True
+
+private def LValOutcomeNoTarget : LValOutcome → Prop
+  | .target _ _ => False
+  | _ => True
+
+private theorem stepExprRel_noValue (st : RuntimeState) :
+    ∀ {e o}, StepExpr st e o → ExprOutcomeNoValue o := by
+  apply @StepExpr.rec st
+    (motive_1 := fun _ o _ => ExprOutcomeNoValue o)
+    (motive_2 := fun _ o _ => LValOutcomeNoTarget o)
+    (motive_3 := fun _ o _ => True)
+    (motive_4 := fun _ o _ => True)
+    (motive_5 := fun _ o _ => True)
+  case callDef =>
+    intros
+    cases ‹ArgListOutcome›
+    case values =>
+      simp [liftAE, enterFunction]
+      split <;> simp [ExprOutcomeNoValue]
+    all_goals simp [liftAE, ExprOutcomeNoValue]
+  case activeCall =>
+    intros
+    cases ‹BodyOutcome› <;> simp [liftActiveCall, ExprOutcomeNoValue]
+    cases ‹Control› <;> simp [liftActiveCall, ExprOutcomeNoValue]
+  all_goals intros
+  all_goals
+    first
+    | trivial
+    | (cases ‹ExprOutcome› <;>
+        simp [ExprOutcomeNoValue, LValOutcomeNoTarget, liftE, liftLE, liftAE,
+          liftActiveCall, liftIndexLVal, liftArgsTail, liftExprArgs, enterFunction,
+          bumpOutcome] <;>
+        (repeat' split) <;>
+        simp [ExprOutcomeNoValue, LValOutcomeNoTarget])
+    | (cases ‹LValOutcome› <;>
+        simp [ExprOutcomeNoValue, LValOutcomeNoTarget, liftE, liftLE, liftAE,
+          liftActiveCall, liftIndexLVal, liftArgsTail, liftExprArgs, enterFunction,
+          bumpOutcome] <;>
+        (repeat' split) <;>
+        simp [ExprOutcomeNoValue, LValOutcomeNoTarget])
+    | (cases ‹ArgListOutcome› <;>
+        simp [ExprOutcomeNoValue, LValOutcomeNoTarget, liftE, liftLE, liftAE,
+          liftActiveCall, liftIndexLVal, liftArgsTail, liftExprArgs, enterFunction,
+          bumpOutcome] <;>
+        (repeat' split) <;>
+        simp [ExprOutcomeNoValue, LValOutcomeNoTarget])
+    | (cases ‹BodyOutcome› <;>
+        simp [ExprOutcomeNoValue, LValOutcomeNoTarget, liftE, liftLE, liftAE,
+          liftActiveCall, liftIndexLVal, liftArgsTail, liftExprArgs, enterFunction,
+          bumpOutcome] <;>
+        (repeat' split) <;>
+        simp [ExprOutcomeNoValue, LValOutcomeNoTarget])
+    | (cases ‹StmtOutcome› <;>
+        simp [ExprOutcomeNoValue, LValOutcomeNoTarget, liftE, liftLE, liftAE,
+          liftActiveCall, liftIndexLVal, liftArgsTail, liftExprArgs, enterFunction,
+          bumpOutcome] <;>
+        (repeat' split) <;>
+        simp [ExprOutcomeNoValue, LValOutcomeNoTarget])
+    | simp [ExprOutcomeNoValue, LValOutcomeNoTarget, bumpOutcome]
+
+private theorem stepLValRel_noTarget (st : RuntimeState) :
+    ∀ {lv o}, StepLVal st lv o → LValOutcomeNoTarget o := by
+  apply @StepLVal.rec st
+    (motive_1 := fun _ o _ => ExprOutcomeNoValue o)
+    (motive_2 := fun _ o _ => LValOutcomeNoTarget o)
+    (motive_3 := fun _ o _ => True)
+    (motive_4 := fun _ o _ => True)
+    (motive_5 := fun _ o _ => True)
+  case callDef =>
+    intros
+    cases ‹ArgListOutcome›
+    case values =>
+      simp [liftAE, enterFunction]
+      split <;> simp [ExprOutcomeNoValue]
+    all_goals simp [liftAE, ExprOutcomeNoValue]
+  case activeCall =>
+    intros
+    cases ‹BodyOutcome› <;> simp [liftActiveCall, ExprOutcomeNoValue]
+    cases ‹Control› <;> simp [liftActiveCall, ExprOutcomeNoValue]
+  all_goals intros
+  all_goals
+    first
+    | trivial
+    | (cases ‹ExprOutcome› <;>
+        simp [ExprOutcomeNoValue, LValOutcomeNoTarget, liftE, liftLE, liftAE,
+          liftActiveCall, liftIndexLVal, liftArgsTail, liftExprArgs, enterFunction,
+          bumpOutcome] <;>
+        (repeat' split) <;>
+        simp [ExprOutcomeNoValue, LValOutcomeNoTarget])
+    | (cases ‹LValOutcome› <;>
+        simp [ExprOutcomeNoValue, LValOutcomeNoTarget, liftE, liftLE, liftAE,
+          liftActiveCall, liftIndexLVal, liftArgsTail, liftExprArgs, enterFunction,
+          bumpOutcome] <;>
+        (repeat' split) <;>
+        simp [ExprOutcomeNoValue, LValOutcomeNoTarget])
+    | (cases ‹ArgListOutcome› <;>
+        simp [ExprOutcomeNoValue, LValOutcomeNoTarget, liftE, liftLE, liftAE,
+          liftActiveCall, liftIndexLVal, liftArgsTail, liftExprArgs, enterFunction,
+          bumpOutcome] <;>
+        (repeat' split) <;>
+        simp [ExprOutcomeNoValue, LValOutcomeNoTarget])
+    | (cases ‹BodyOutcome› <;>
+        simp [ExprOutcomeNoValue, LValOutcomeNoTarget, liftE, liftLE, liftAE,
+          liftActiveCall, liftIndexLVal, liftArgsTail, liftExprArgs, enterFunction,
+          bumpOutcome] <;>
+        (repeat' split) <;>
+        simp [ExprOutcomeNoValue, LValOutcomeNoTarget])
+    | (cases ‹StmtOutcome› <;>
+        simp [ExprOutcomeNoValue, LValOutcomeNoTarget, liftE, liftLE, liftAE,
+          liftActiveCall, liftIndexLVal, liftArgsTail, liftExprArgs, enterFunction,
+          bumpOutcome] <;>
+        (repeat' split) <;>
+        simp [ExprOutcomeNoValue, LValOutcomeNoTarget])
+    | simp [ExprOutcomeNoValue, LValOutcomeNoTarget, bumpOutcome]
+
+/-- A `.value` step outcome only arises from the literal value term. -/
+theorem stepExpr_value_inv {st e st' v} (h : stepExpr st e = .value st' v) :
+    e = .value v ∧ st' = st := by
+  by_cases hv : ExprTerm.isValue e = false
+  · exfalso
+    have hrel := stepExprRel_noValue st (stepExpr_complete (st := st) (e := e) hv)
+    rw [h] at hrel
+    simp [ExprOutcomeNoValue] at hrel
+  · cases e <;> simp [ExprTerm.isValue] at hv
+    simp [stepExpr] at h
+    exact ⟨by rw [h.2], h.1.symm⟩
+
+/-- A `.target` step outcome only arises from the literal target term. -/
+theorem stepLVal_target_inv {st lv st' t} (h : stepLVal st lv = .target st' t) :
+    lv = .target t ∧ st' = st := by
+  by_cases hv : LValTerm.isTarget lv = false
+  · exfalso
+    have hrel := stepLValRel_noTarget st (stepLVal_complete (st := st) (lv := lv) hv)
+    rw [h] at hrel
+    simp [LValOutcomeNoTarget] at hrel
+  · cases lv <;> simp [LValTerm.isTarget] at hv
+    simp [stepLVal] at h
+    exact ⟨by rw [h.2], h.1.symm⟩
+
+/-- Argument-list steps preserve function lookups. -/
+theorem stepArgs_next_lookupFunction {st args st' args'} (name : Name)
+    (h : stepArgs st args = .next st' args') :
+    lookupFunction st' name = lookupFunction st name := by
+  have hl := stepArgs_lookupFunction (name := name) h
+  simpa [ArgsOutcomeLookup] using hl
+
+/-- Argument-list completion preserves function lookups. -/
+theorem stepArgs_values_lookupFunction {st args st' values} (name : Name)
+    (h : stepArgs st args = .values st' values) :
+    lookupFunction st' name = lookupFunction st name := by
+  have hl := stepArgs_lookupFunction (name := name) h
+  simpa [ArgsOutcomeLookup] using hl
+
+theorem stepExpr_call_args_next {name : Name} {defn : FunDef} {st args st' args'}
     (hlookup : lookupFunction st name = some defn)
     (h : stepArgs st args = .next st' args') :
     stepExpr st (.call name args) = .next st' (.call name args') := by
   simp [stepExpr, hlookup, h]
 
-private theorem stepExpr_call_args_control {name : Name} {defn : FunDef} {st args st' c}
+theorem stepExpr_call_args_control {name : Name} {defn : FunDef} {st args st' c}
     (hlookup : lookupFunction st name = some defn)
     (h : stepArgs st args = .control st' c) :
     stepExpr st (.call name args) = .control st' c := by
   simp [stepExpr, hlookup, h]
 
-private theorem stepExpr_call_args_error {name : Name} {defn : FunDef} {st args st' msg}
+theorem stepExpr_call_args_error {name : Name} {defn : FunDef} {st args st' msg}
     (hlookup : lookupFunction st name = some defn)
     (h : stepArgs st args = .runtimeError st' msg) :
     stepExpr st (.call name args) = .runtimeError st' msg := by

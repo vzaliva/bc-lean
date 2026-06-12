@@ -71,18 +71,6 @@ theorem runProgramWithState_final_unique {st : RuntimeState} {program : Program}
     r₁ = r₂ :=
   runConfig_final_unique h₁ hfin₁ h₂ hfin₂
 
-/-! ### Termination transfer
-
-The heart of the backward direction: a finite small-step run from a valid entry
-state guarantees the big-step evaluator terminates (does not run out of fuel for
-some fuel budget). -/
-
-theorem termination_transfer {st : RuntimeState} {program : Program}
-    {o : StepResult} (hst : st.stopped = false)
-    (h : ConfigRuns ⟨st, ProgramTerm.ofProgram program⟩ o) :
-    ∃ fb, ResultNotFuel (evalProgramItems fb st program) := by
-  sorry
-
 /-- When the big-step evaluator does not exhaust its fuel, the program runner
 returns a non-`outOfFuel` (final) result. -/
 theorem runProgramWithState_final_of_notFuel {fb : Nat} {st : RuntimeState}

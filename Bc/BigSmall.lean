@@ -10,6 +10,7 @@
 
 import Bc.BigStep
 import Bc.BigSmall.Backward
+import Bc.BigSmall.Mirror
 import Bc.BigSmall.Forward
 import Bc.BigSmall.Fuel
 import Bc.BigSmall.Stopped
@@ -674,6 +675,182 @@ private theorem evalProgramItems_to_ConfigRuns {fuel st program r}
                             (BodyRuns.lift_error_to_config
                               (rest := ProgramTerm.ofProgram rest) hno hbody),
                         by simp [stepResultToRunResult, resultToRunResult]⟩
+
+/-! ### Termination transfer: terminating small runs force big-step termination -/
+
+private theorem ConfigRuns.invert_next {cfg : Config} {c' : Config} {o : StepResult}
+    (h : ConfigRuns cfg o) (hstep : step cfg = .next c') : ConfigRuns c' o := by
+  cases h with
+  | stop hstep' hfinal =>
+      rw [hstep'] at hstep
+      subst hstep
+      exact absurd hfinal (by simp [StepResultFinal])
+  | next hstep' hrun =>
+      rw [hstep'] at hstep
+      cases hstep
+      exact hrun
+
+private theorem BodyRuns.control_ne_normal {st : RuntimeState} {b : BodyTerm}
+    {st' : RuntimeState} {c : Control}
+    (h : BodyRuns st b (.control st' c)) : c ≠ .normal := by
+  generalize hout : BodyOutcome.control st' c = o at h
+  induction h with
+  | stop hstep hfinal =>
+      cases hout
+      exact stepBody_control_ne_normal hstep
+  | next _ _ ih => exact ih hout
+
+/-- A finite config run whose program starts with a quit-free statement group
+decomposes into a finite body run of the group followed by (when the group
+completes normally) a run of the remaining program. -/
+private theorem ConfigRuns.body_split {st : RuntimeState} {terms : List StmtTerm}
+    {progRest : ProgramTerm} {o : StepResult}
+    (hno : StmtTerm.listContainsQuit terms = false)
+    (h : ConfigRuns ⟨st, topItemStmtsOf terms ++ progRest⟩ o) :
+    (∃ st', BodyRuns st (.stmts terms) (.done st') ∧ ConfigRuns ⟨st', progRest⟩ o) ∨
+    (∃ st' c, BodyRuns st (.stmts terms) (.control st' c) ∧ o = .control st' c) ∨
+    (∃ st' msg, BodyRuns st (.stmts terms) (.runtimeError st' msg) ∧
+      o = .runtimeError st' msg) := by
+  generalize hcfg : (⟨st, topItemStmtsOf terms ++ progRest⟩ : Config) = cfg at h
+  induction h generalizing st terms with
+  | stop hstep hfinal =>
+      subst hcfg
+      cases terms with
+      | nil =>
+          exact .inl ⟨st, BodyRuns.stop (by simp [stepBody]) (by simp [BodyFinal]),
+            ConfigRuns.stop (by simpa [topItemStmtsOf] using hstep) hfinal⟩
+      | cons t ts =>
+          cases hbody : stepBody st (.stmts (t :: ts)) with
+          | next st₁ b' =>
+              cases b' with
+              | stmts terms' =>
+                  rw [stepConfig_body_next hno hbody] at hstep
+                  cases hstep
+                  exact absurd hfinal (by simp [StepResultFinal])
+          | done st₁ => exact absurd hbody (stepBody_cons_ne_done)
+          | control st₁ c =>
+              rw [stepConfig_body_control hno hbody] at hstep
+              exact .inr (.inl ⟨st₁, c,
+                BodyRuns.stop hbody (by simp [BodyFinal]), hstep.symm⟩)
+          | runtimeError st₁ msg =>
+              rw [stepConfig_body_error hno hbody] at hstep
+              exact .inr (.inr ⟨st₁, msg,
+                BodyRuns.stop hbody (by simp [BodyFinal]), hstep.symm⟩)
+  | next hstep hrun ih =>
+      subst hcfg
+      cases terms with
+      | nil =>
+          refine .inl ⟨st, BodyRuns.stop (by simp [stepBody]) (by simp [BodyFinal]), ?_⟩
+          exact ConfigRuns.next (by simpa [topItemStmtsOf] using hstep) hrun
+      | cons t ts =>
+          cases hbody : stepBody st (.stmts (t :: ts)) with
+          | next st₁ b' =>
+              cases b' with
+              | stmts terms' =>
+                  have hno' : StmtTerm.listContainsQuit terms' = false :=
+                    stepBody_next_preserves_noQuit_stmts hno hbody
+                  have hstep' := stepConfig_body_next (rest := progRest) hno hbody
+                  rw [hstep'] at hstep
+                  cases hstep
+                  rcases ih hno' rfl with hdone | hctl | herr
+                  · obtain ⟨st', hb, hc⟩ := hdone
+                    exact .inl ⟨st', BodyRuns.next hbody hb, hc⟩
+                  · obtain ⟨st', c, hb, hoeq⟩ := hctl
+                    exact .inr (.inl ⟨st', c, BodyRuns.next hbody hb, hoeq⟩)
+                  · obtain ⟨st', msg, hb, hoeq⟩ := herr
+                    exact .inr (.inr ⟨st', msg, BodyRuns.next hbody hb, hoeq⟩)
+          | done st₁ => exact absurd hbody (stepBody_cons_ne_done)
+          | control st₁ c =>
+              rw [stepConfig_body_control hno hbody] at hstep
+              cases hstep
+          | runtimeError st₁ msg =>
+              rw [stepConfig_body_error hno hbody] at hstep
+              cases hstep
+
+/-- Termination transfer: a finite small-step run of a program forces the
+big-step evaluator to terminate on some fuel budget. -/
+theorem termination_transfer {st : RuntimeState} {program : Program}
+    {o : StepResult} (hst : st.stopped = false)
+    (h : ConfigRuns ⟨st, ProgramTerm.ofProgram program⟩ o) :
+    ∃ fb, ResultNotFuel (evalProgramItems fb st program) := by
+  induction program generalizing st o with
+  | nil => exact ⟨1, by simp [evalProgramItems, ResultNotFuel]⟩
+  | cons item rest ih =>
+      cases hquit : TopItem.containsQuit item with
+      | true => exact ⟨1, by simp [evalProgramItems, hquit, ResultNotFuel]⟩
+      | false =>
+          cases item with
+          | funDef defn =>
+              have hbody : bodyContainsQuit defn.body = false := by
+                simpa [TopItem.containsQuit] using hquit
+              have hstep : step ⟨st, ProgramTerm.ofProgram (TopItem.funDef defn :: rest)⟩ =
+                  .next ⟨setFunction st defn, ProgramTerm.ofProgram rest⟩ := by
+                simp [ProgramTerm.ofProgram, TopItemTerm.ofTopItem, step, next,
+                  TopItemTerm.containsQuit, hbody]
+              have hrun := ConfigRuns.invert_next h hstep
+              have hst' : (setFunction st defn).stopped = false := hst
+              obtain ⟨fb, hfb⟩ := ih hst' hrun
+              refine ⟨fb + 1, ?_⟩
+              have : evalProgramItems (fb + 1) st (TopItem.funDef defn :: rest) =
+                  evalProgramItems fb (setFunction st defn) rest := by
+                simp [evalProgramItems, hquit, evalTopItem, hst']
+              rw [this]
+              exact hfb
+          | stmts ss =>
+              have hnoEq : stmtsContainQuit ss = false := by
+                simpa [TopItem.containsQuit] using hquit
+              have hno : StmtTerm.listContainsQuit (StmtTerm.ofStmts ss) = false := by
+                simp [listContainsQuit_ofStmts, hnoEq]
+              have hnoProp : ¬ stmtsContainQuit ss := by
+                intro hs; simp [hs] at hnoEq
+              have hmap := TopItemTerm.ofTopItem_stmts_map_noQuit ss hnoProp
+              have h' : ConfigRuns
+                  ⟨st, topItemStmtsOf (StmtTerm.ofStmts ss) ++ ProgramTerm.ofProgram rest⟩
+                  o := by
+                have : ProgramTerm.ofProgram (TopItem.stmts ss :: rest) =
+                    topItemStmtsOf (StmtTerm.ofStmts ss) ++ ProgramTerm.ofProgram rest := by
+                  simp [ProgramTerm.ofProgram, hmap]
+                rwa [this] at h
+              rcases ConfigRuns.body_split hno h' with hdone | hctl | herr
+              · obtain ⟨st', hb, hc⟩ := hdone
+                obtain ⟨fb, hfb⟩ := BodyRuns.to_eval hb
+                obtain ⟨m, hm⟩ := mirror_stmts hfb (by simp [bodyFromOutcome, ResultNotFuel])
+                simp only [bodyFromOutcome] at hm
+                cases hstop : st'.stopped with
+                | true =>
+                    refine ⟨m + 1, ?_⟩
+                    simp [evalProgramItems, hquit, evalTopItem, hm, hstop, ResultNotFuel]
+                | false =>
+                    obtain ⟨fbR, hR⟩ := ih hstop hc
+                    refine ⟨max m fbR + 1, ?_⟩
+                    have hms : evalStmts (max m fbR) st ss = .ok st' .normal :=
+                      evalStmts_mono (show m ≤ max m fbR by omega) hm
+                        (by simp [ResultNotFuel])
+                    have hRr : evalProgramItems (max m fbR) st' rest =
+                        evalProgramItems fbR st' rest :=
+                      evalProgramItems_mono (show fbR ≤ max m fbR by omega) rfl hR
+                    have : evalProgramItems (max m fbR + 1) st (TopItem.stmts ss :: rest) =
+                        evalProgramItems (max m fbR) st' rest := by
+                      simp [evalProgramItems, hquit, evalTopItem, hms, hstop]
+                    rw [this, hRr]
+                    exact hR
+              · obtain ⟨st', c, hb, hoeq⟩ := hctl
+                have hcne : c ≠ .normal := BodyRuns.control_ne_normal hb
+                obtain ⟨fb, hfb⟩ := BodyRuns.to_eval hb
+                obtain ⟨m, hm⟩ := mirror_stmts hfb (by simp [bodyFromOutcome, ResultNotFuel])
+                simp only [bodyFromOutcome] at hm
+                refine ⟨m + 1, ?_⟩
+                cases c with
+                | normal => exact absurd rfl hcne
+                | «break» => simp [evalProgramItems, hquit, evalTopItem, hm, ResultNotFuel]
+                | «return» v? => simp [evalProgramItems, hquit, evalTopItem, hm, ResultNotFuel]
+                | quit => simp [evalProgramItems, hquit, evalTopItem, hm, ResultNotFuel]
+              · obtain ⟨st', msg, hb, hoeq⟩ := herr
+                obtain ⟨fb, hfb⟩ := BodyRuns.to_eval hb
+                obtain ⟨m, hm⟩ := mirror_stmts hfb (by simp [bodyFromOutcome, ResultNotFuel])
+                simp only [bodyFromOutcome] at hm
+                refine ⟨m + 1, ?_⟩
+                simp [evalProgramItems, hquit, evalTopItem, hm, ResultNotFuel]
 
 /-! ### Final-result agreement -/
 

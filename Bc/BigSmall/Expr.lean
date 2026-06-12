@@ -211,78 +211,66 @@ private theorem exprSmallSteps_pos (e : Expr) : 0 < exprSmallSteps e := by
   case var v => simp [exprSmallSteps]
   case special v => simp [exprSmallSteps]
   case arrayAccess name idx =>
-    have h := exprSmallSteps_pos idx
-    simp [exprSmallSteps, h]
+    simp [exprSmallSteps]
   case assign lhs _ rhs =>
-    have h1 := lvalSmallSteps_pos lhs
-    have h2 := exprSmallSteps_pos rhs
-    simp [exprSmallSteps, h1, h2]
+    simp [exprSmallSteps]
   case rel first rest =>
-    have h := exprSmallSteps_pos first
-    simp [exprSmallSteps, h]
+    simp [exprSmallSteps]
   case bin _ lhs rhs =>
-    have h1 := exprSmallSteps_pos lhs
-    have h2 := exprSmallSteps_pos rhs
-    simp [exprSmallSteps, h1, h2]
+    simp [exprSmallSteps]
   case unary op arg =>
     cases op with
     | neg =>
-        have h := exprSmallSteps_pos arg
-        simp [exprSmallSteps, h]
+        simp [exprSmallSteps]
     | preIncr =>
         match arg with
         | .var _ | .special _ => simp [exprSmallSteps]
-        | .arrayAccess _ idx => have h := exprSmallSteps_pos idx; simp [exprSmallSteps, h]
-        | .paren body => have h := exprSmallSteps_pos body; simp [exprSmallSteps, h]
+        | .arrayAccess _ idx => simp [exprSmallSteps]
+        | .paren body => simp [exprSmallSteps]
         | .num _ | .assign _ _ _ | .rel _ _ | .bin _ _ _ | .unary _ _ | .call _ _ | .builtin _ _ =>
             simp [exprSmallSteps]
     | preDecr =>
         match arg with
         | .var _ | .special _ => simp [exprSmallSteps]
-        | .arrayAccess _ idx => have h := exprSmallSteps_pos idx; simp [exprSmallSteps, h]
-        | .paren body => have h := exprSmallSteps_pos body; simp [exprSmallSteps, h]
+        | .arrayAccess _ idx => simp [exprSmallSteps]
+        | .paren body => simp [exprSmallSteps]
         | .num _ | .assign _ _ _ | .rel _ _ | .bin _ _ _ | .unary _ _ | .call _ _ | .builtin _ _ =>
             simp [exprSmallSteps]
     | postIncr =>
         match arg with
         | .var _ | .special _ => simp [exprSmallSteps]
-        | .arrayAccess _ idx => have h := exprSmallSteps_pos idx; simp [exprSmallSteps, h]
-        | .paren body => have h := exprSmallSteps_pos body; simp [exprSmallSteps, h]
+        | .arrayAccess _ idx => simp [exprSmallSteps]
+        | .paren body => simp [exprSmallSteps]
         | .num _ | .assign _ _ _ | .rel _ _ | .bin _ _ _ | .unary _ _ | .call _ _ | .builtin _ _ =>
             simp [exprSmallSteps]
     | postDecr =>
         match arg with
         | .var _ | .special _ => simp [exprSmallSteps]
-        | .arrayAccess _ idx => have h := exprSmallSteps_pos idx; simp [exprSmallSteps, h]
-        | .paren body => have h := exprSmallSteps_pos body; simp [exprSmallSteps, h]
+        | .arrayAccess _ idx => simp [exprSmallSteps]
+        | .paren body => simp [exprSmallSteps]
         | .num _ | .assign _ _ _ | .rel _ _ | .bin _ _ _ | .unary _ _ | .call _ _ | .builtin _ _ =>
             simp [exprSmallSteps]
   case call _ args =>
-    have h := argsSmallSteps_pos args
-    simp [exprSmallSteps, h]
+    simp [exprSmallSteps]
   case builtin _ arg =>
     cases arg with
     | none => simp [exprSmallSteps]
     | some arg =>
-        have h := exprSmallSteps_pos arg
-        simp [exprSmallSteps, h]
+        simp [exprSmallSteps]
   case paren body =>
-    have h := exprSmallSteps_pos body
-    simp [exprSmallSteps, h]
+    simp [exprSmallSteps]
 
 private theorem lvalSmallSteps_pos (lv : LVal) : 0 < lvalSmallSteps lv := by
   cases lv
   case var _ => simp [lvalSmallSteps]
   case special _ => simp [lvalSmallSteps]
   case array _ idx =>
-    have h := exprSmallSteps_pos idx
-    simp [lvalSmallSteps, h]
+    simp [lvalSmallSteps]
 
 private theorem argSmallSteps_pos (arg : Arg) : 0 < argSmallSteps arg := by
   cases arg
   case expr e =>
-    have h := exprSmallSteps_pos e
-    simp [argSmallSteps, h]
+    simp [argSmallSteps]
   case arrayRef _ => simp [argSmallSteps]
 
 private theorem argsSmallSteps_pos (args : List Arg) : 0 < argsSmallSteps args := by
@@ -296,19 +284,19 @@ private theorem argsSmallSteps_pos (args : List Arg) : 0 < argsSmallSteps args :
 
 end
 
-private theorem runExprWitness_pos (e : Expr) {fuel : Nat} (hfuel : 0 < fuel) :
+private theorem runExprWitness_pos (e : Expr) {fuel : Nat} (_hfuel : 0 < fuel) :
     0 < runExprWitness e fuel := by
   have hsteps := exprSmallSteps_pos e
   unfold runExprWitness
   omega
 
-private theorem runLValWitness_pos (lv : LVal) {fuel : Nat} (hfuel : 0 < fuel) :
+private theorem runLValWitness_pos (lv : LVal) {fuel : Nat} (_hfuel : 0 < fuel) :
     0 < runLValWitness lv fuel := by
   have hsteps := lvalSmallSteps_pos lv
   unfold runLValWitness
   omega
 
-private theorem runArgsWitness_pos (args : List Arg) {fuel : Nat} (hfuel : 0 < fuel) :
+private theorem runArgsWitness_pos (args : List Arg) {fuel : Nat} (_hfuel : 0 < fuel) :
     0 < runArgsWitness args fuel := by
   have hsteps := argsSmallSteps_pos args
   unfold runArgsWitness
@@ -323,7 +311,7 @@ private theorem runExprFuel_value_done {fuel st n} (hfuel : 0 < fuel) :
 
 private theorem runExprFuel_after_step {fuel st e st' e' o}
     (hstep : stepExpr st e = .next st' e') (hrest : runExprFuel fuel st' e' = o)
-    (hfinal : o ≠ .runtimeError st' "out of fuel in runExprFuel") :
+    (_hfinal : o ≠ .runtimeError st' "out of fuel in runExprFuel") :
     runExprFuel (fuel + 1) st e = o := by
   simpa [runExprFuel_step, hstep] using hrest
 
@@ -339,13 +327,13 @@ private theorem runArgsFuel_values_done {fuel st} (hfuel : 0 < fuel) :
 
 private theorem runLValFuel_after_step {fuel st lv st' lv' o}
     (hstep : stepLVal st lv = .next st' lv') (hrest : runLValFuel fuel st' lv' = o)
-    (hfinal : o ≠ .runtimeError st' "out of fuel in runLValFuel") :
+    (_hfinal : o ≠ .runtimeError st' "out of fuel in runLValFuel") :
     runLValFuel (fuel + 1) st lv = o := by
   simpa [runLValFuel_step, hstep] using hrest
 
 private theorem runArgsFuel_after_step {fuel st args st' args' o}
     (hstep : stepArgs st args = .next st' args') (hrest : runArgsFuel fuel st' args' = o)
-    (hfinal : o ≠ .runtimeError st' "out of fuel in runArgsFuel") :
+    (_hfinal : o ≠ .runtimeError st' "out of fuel in runArgsFuel") :
     runArgsFuel (fuel + 1) st args = o := by
   simpa [runArgsFuel_step, hstep] using hrest
 
@@ -381,7 +369,7 @@ private theorem runExprWitness_relRest_le {rest : List (RelOp × Expr)} {fuel : 
 
 private theorem relRestSmallSteps_pos (rest : List (RelOp × Expr)) :
     0 < relRestSmallSteps rest + 2 := by
-  simp [relRestSmallSteps]
+  simp
 
 private theorem evalLValueTarget_to_runLValFuel_zero {st lv r}
     (h : evalLValueTarget 0 st lv = r) (hne : r ≠ .outOfFuel st) : False := by

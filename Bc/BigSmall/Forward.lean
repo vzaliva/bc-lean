@@ -384,7 +384,7 @@ private theorem evalToExprOutcome_bumpEvalResult (op st target) :
 
 private theorem ExprRuns.bump_target {st op target} :
     ExprRuns st (.bump op (.target target)) (bumpExprOutcome op st target) := by
-  cases op <;> simp [stepExpr, bumpExprOutcome]
+  cases op <;> simp [bumpExprOutcome]
   all_goals exact ExprRuns.next (by simp [stepExpr]) ExprRuns.value
 
 private theorem evalLValueTarget_ne_control_aux {fuel st lv st' c} :
@@ -398,9 +398,9 @@ private theorem evalLValueTarget_ne_control_aux {fuel st lv st' c} :
       | special v => simp [evalLValueTarget]
       | array name idx =>
           simp only [evalLValueTarget]
-          cases hidx : evalExpr fuel' st idx <;> simp [hidx]
+          cases hidx : evalExpr fuel' st idx <;> simp
           next state value =>
-            cases hindex : indexOfNum? value <;> simp [hindex]
+            cases hindex : indexOfNum? value <;> simp
 
 private theorem unaryBump_from_eval {fuel' op st arg r}
     (prev : ForwardProps fuel')
@@ -473,9 +473,9 @@ private theorem evalLValueTarget_ne_control {fuel st lv st' c} :
       | special v => simp [evalLValueTarget]
       | array name idx =>
           simp only [evalLValueTarget]
-          cases hidx : evalExpr fuel' st idx <;> simp [hidx]
+          cases hidx : evalExpr fuel' st idx <;> simp
           next state value =>
-            cases hindex : indexOfNum? value <;> simp [hindex]
+            cases hindex : indexOfNum? value <;> simp
 
 theorem stepExpr_bin_rhs_control {op : BinOp} {left : Num}
     {st rhs st' c} (h : stepExpr st rhs = .control st' c) :
@@ -956,7 +956,7 @@ attribute [local simp] control_break_ne_normal control_return_ne_normal control_
 private theorem liftE_noNormal {k : ExprTerm → ExprTerm} {o : ExprOutcome}
     (h : ExprOutcomeNoNormal o) : ExprOutcomeNoNormal (liftE k o) := by
   cases o <;> simp [ExprOutcomeNoNormal, liftE] at h ⊢
-  case control state control => cases control <;> simp [ExprOutcomeNoNormal] at h ⊢
+  case control state control => cases control <;> simp at h ⊢
 
 private theorem liftLE_noNormal {kn : LValTerm → ExprTerm}
     {kt : RuntimeState → LValueTarget → ExprOutcome} {o : LValOutcome}
@@ -979,60 +979,58 @@ private theorem liftAE_noNormal {kn : List ArgTerm → ExprTerm}
   cases o <;> simp [ArgsOutcomeNoNormal, ExprOutcomeNoNormal, liftAE] at h ⊢
   case values state values => exact hv state values
   case control state control =>
-    cases control <;> simp [ArgsOutcomeNoNormal] at h ⊢
+    cases control <;> simp at h ⊢
     all_goals (intro hc; cases hc)
 
 private theorem liftActiveCall_noNormal {o : BodyOutcome}
     (h : BodyOutcomeNoNormal o) : ExprOutcomeNoNormal (liftActiveCall o) := by
   cases o <;> simp [BodyOutcomeNoNormal, ExprOutcomeNoNormal, liftActiveCall] at h ⊢
-  case control state control => cases control <;> simp [BodyOutcomeNoNormal,
-    ExprOutcomeNoNormal, liftActiveCall] at h ⊢
+  case control state control => cases control <;> simp at h ⊢
 
 private theorem liftArgsTail_noNormal {kn : List ArgTerm → List ArgTerm}
     {kv : List (Sum Num Name) → List (Sum Num Name)} {o : ArgListOutcome}
     (h : ArgsOutcomeNoNormal o) : ArgsOutcomeNoNormal (liftArgsTail kn kv o) := by
   cases o <;> simp [ArgsOutcomeNoNormal, liftArgsTail] at h ⊢
-  case control state control => cases control <;> simp [ArgsOutcomeNoNormal] at h ⊢
+  case control state control => cases control <;> simp at h ⊢
 
 private theorem liftExprArgs_noNormal {kn : ExprTerm → List ArgTerm} {o : ExprOutcome}
     (h : ExprOutcomeNoNormal o) : ArgsOutcomeNoNormal (liftExprArgs kn o) := by
   cases o <;> simp [ExprOutcomeNoNormal, ArgsOutcomeNoNormal, liftExprArgs] at h ⊢
   case control state control =>
-    cases control <;> simp [ExprOutcomeNoNormal] at h ⊢
+    cases control <;> simp at h ⊢
     all_goals (intro hc; cases hc)
 
 private theorem liftExprStmt_noNormal {k : ExprTerm → StmtTerm} {o : ExprOutcome}
     (h : ExprOutcomeNoNormal o) : StmtOutcomeNoNormal (liftExprStmt k o) := by
   cases o <;> simp [ExprOutcomeNoNormal, StmtOutcomeNoNormal, liftExprStmt] at h ⊢
   case control state control =>
-    cases control <;> simp [ExprOutcomeNoNormal] at h ⊢
+    cases control <;> simp at h ⊢
     all_goals (intro hc; cases hc)
 
 private theorem liftLoopBody_noNormal {after : StmtTerm} {o : StmtOutcome}
     (h : StmtOutcomeNoNormal o) : StmtOutcomeNoNormal (liftLoopBody after o) := by
   cases o <;> simp [StmtOutcomeNoNormal, liftLoopBody] at h ⊢
-  case control state control => cases control <;> simp [StmtOutcomeNoNormal,
-    liftLoopBody] at h ⊢
+  case control state control => cases control <;> simp at h ⊢
 
 private theorem liftSeq_noNormal {second : StmtTerm} {o : StmtOutcome}
     (h : StmtOutcomeNoNormal o) : StmtOutcomeNoNormal (liftSeq second o) := by
   cases o <;> simp [StmtOutcomeNoNormal, liftSeq] at h ⊢
   case control state control =>
-    cases control <;> simp [StmtOutcomeNoNormal] at h ⊢
+    cases control <;> simp at h ⊢
     all_goals (intro hc; cases hc)
 
 private theorem liftBlock_noNormal {o : BodyOutcome}
     (h : BodyOutcomeNoNormal o) : StmtOutcomeNoNormal (liftBlock o) := by
   cases o <;> simp [BodyOutcomeNoNormal, StmtOutcomeNoNormal, liftBlock] at h ⊢
   case control state control =>
-    cases control <;> simp [BodyOutcomeNoNormal] at h ⊢
+    cases control <;> simp at h ⊢
     all_goals (intro hc; cases hc)
 
 private theorem liftBodyStep_noNormal {rest : List StmtTerm} {o : StmtOutcome}
     (h : StmtOutcomeNoNormal o) : BodyOutcomeNoNormal (liftBodyStep rest o) := by
   cases o <;> simp [StmtOutcomeNoNormal, BodyOutcomeNoNormal, liftBodyStep] at h ⊢
   case control state control =>
-    cases control <;> simp [StmtOutcomeNoNormal] at h ⊢
+    cases control <;> simp at h ⊢
     all_goals (intro hc; cases hc)
 
 local macro "normal_ss" : tactic =>
@@ -1080,7 +1078,8 @@ theorem stepExpr_no_control_normal {st e st'}
     (h : stepExpr st e = .control st' .normal) : False := by
   by_cases hv : ExprTerm.isValue e = false
   · have hrel := stepExprRel_noNormal st (stepExpr_complete (st := st) (e := e) hv)
-    simpa [h, ExprOutcomeNoNormal] using hrel
+    rw [h] at hrel
+    exact hrel rfl
   · cases e <;> simp [ExprTerm.isValue] at hv
     simp [stepExpr] at h
 
@@ -1167,6 +1166,7 @@ private def LValOutcomeNoTarget : LValOutcome → Prop
   | .target _ _ => False
   | _ => True
 
+set_option linter.unusedSimpArgs false in
 private theorem stepExprRel_noValue (st : RuntimeState) :
     ∀ {e o}, StepExpr st e o → ExprOutcomeNoValue o := by
   apply @StepExpr.rec st
@@ -1222,6 +1222,7 @@ private theorem stepExprRel_noValue (st : RuntimeState) :
         simp [ExprOutcomeNoValue, LValOutcomeNoTarget])
     | simp [ExprOutcomeNoValue, LValOutcomeNoTarget, bumpOutcome]
 
+set_option linter.unusedSimpArgs false in
 private theorem stepLValRel_noTarget (st : RuntimeState) :
     ∀ {lv o}, StepLVal st lv o → LValOutcomeNoTarget o := by
   apply @StepLVal.rec st
@@ -2230,7 +2231,7 @@ private theorem forwardProps (fuel : Nat) : ForwardProps fuel := by
                 have hr : r = .runtimeError st s!"Function {name} not defined" := by
                   simpa [hlookup] using h.symm
                 cases hr
-                exact ExprRuns.runtimeError (by simp [stepExpr, hlookup, ExprTerm.ofExpr])
+                exact ExprRuns.runtimeError (by simp [stepExpr, hlookup])
             | some defn =>
                 match hargs : evalArgValues fuel' st args with
                 | .ok st₁ argValues =>
@@ -2550,7 +2551,7 @@ private theorem forwardProps (fuel : Nat) : ForwardProps fuel := by
                         (by intro st e st' e' hstep; exact stepStmt_while_next hstep)
                         hcondRun
                         (StmtRuns.stop
-                          (by simp [stepStmt, hzero, bodyTerm])
+                          (by simp [stepStmt, hzero])
                           (by simp [StmtFinal]))
                     · match hbody : evalStmt fuel' st₁ body with
                       | .ok st₂ .normal =>
@@ -2901,7 +2902,7 @@ private theorem forwardProps (fuel : Nat) : ForwardProps fuel := by
                     (by intro st e st' e' hstep; exact stepStmt_forCheck_next hstep)
                     hcondRun
                     (StmtRuns.stop
-                      (by simp [stepStmt, hzero, bodyTerm])
+                      (by simp [stepStmt, hzero])
                       (by simp [StmtFinal]))
                 · match hbody : evalStmt fuel' st₁ body with
                   | .ok st₂ .normal =>
@@ -2922,7 +2923,7 @@ private theorem forwardProps (fuel : Nat) : ForwardProps fuel := by
                                 intro st e st' e' hstep
                                 exact stepStmt_forUpdate_next hstep)
                               hupdateRun
-                              (StmtRuns.next (by simp [stepStmt, afterTerm, bodyTerm, updateTerm])
+                              (StmtRuns.next (by simp [stepStmt, bodyTerm])
                                 hrecRun)
                           have hloop :
                               StmtRuns st₁ (.loopBody bodyTerm afterTerm)

@@ -34,19 +34,22 @@ Shared, semantics-agnostic logic (numeric operators, assignment, builtins, and
 `quit` detection) lives in `Bc/Runtime.lean` so the two evaluators cannot drift
 on those points.
 
-**What is currently proved** (`Bc/Progress.lean`): the small-step transition
-relation has no stuck configurations — every configuration is either terminal
-(normal completion, propagated control, or a runtime error) or can take a step,
-and terminal configurations coincide with normal forms. Note this is established
-*by construction*: the relation is defined as the graph of the total function
-`step`, so the result certifies that `step` is total and its outcomes are
-exhaustively classified, rather than a Wright–Felleisen "well-typed programs do
-not get stuck" theorem (bc is untyped).
+**What is currently proved**:
 
-**Not yet proved** (intended future metatheory): equivalence of the big-step and
-small-step semantics; adequacy of `step` against an independently-defined
-inductive reduction relation; and algebraic/canonical-form metatheory for the
-`Num` arbitrary-precision type.
+- **Big-step / small-step equivalence** (`Bc/BigSmall.lean`): `runProgram_iff`
+  proves that the two executable semantics agree on final results for ordinary
+  program runs. The more general `runProgramWithState_iff` covers custom entry
+  states with `st.stopped = false`.
+- **Progress for small-step configurations** (`Bc/Progress.lean`): `progress`
+  proves every configuration is either terminal (normal completion, propagated
+  control, or a runtime error) or can take a step.
+
+Since bc is untyped, the progress theorem is about exhaustive classification of
+executable configurations rather than type safety.
+
+**Not yet proved** (intended future metatheory): a formal correspondence between
+the Lean semantics and the GNU bc implementation source, and algebraic/canonical
+form metatheory for the `Num` arbitrary-precision type.
 
 ## Parser (tree-sitter)
 

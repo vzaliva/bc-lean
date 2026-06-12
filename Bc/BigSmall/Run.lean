@@ -666,7 +666,7 @@ theorem stepStmt_loop_break {st body after st'}
 theorem stepStmt_loop_control {st body after st' c}
     (hnot : c ≠ .break) (hstep : stepStmt st body = .control st' c) :
     stepStmt st (.loopBody body after) = .control st' c := by
-  cases body <;> simp_all [stepStmt, hnot]
+  cases body <;> simp_all [stepStmt]
 
 theorem stepStmt_loop_error {st body after st' msg}
     (hstep : stepStmt st body = .runtimeError st' msg) :
@@ -971,9 +971,9 @@ theorem BodyRuns.lift_control_to_activeCall {st body st' c}
   | stop hstep _ =>
       cases hout
       cases c <;> first
-        | exact ExprRuns.next (by simp [activeCallControlOutcome, stepExpr, hstep]) ExprRuns.value
-        | exact ExprRuns.runtimeError (by simp [activeCallControlOutcome, stepExpr, hstep])
-        | exact ExprRuns.control (by simp [activeCallControlOutcome, stepExpr, hstep])
+        | exact ExprRuns.next (by simp [stepExpr, hstep]) ExprRuns.value
+        | exact ExprRuns.runtimeError (by simp [stepExpr, hstep])
+        | exact ExprRuns.control (by simp [stepExpr, hstep])
   | next hstep _ ih =>
       exact ExprRuns.next (by simp [stepExpr, hstep]) (ih hout)
 

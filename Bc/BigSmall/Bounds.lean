@@ -91,7 +91,6 @@ termination_by body => sizeOf body
 def topItemSmallSteps (fuel : Nat) : TopItem → Nat
   | .funDef _ => 1
   | .stmts ss => stmtsSmallSteps fuel ss + 1
-termination_by item => sizeOf item
 
 def programSmallSteps (fuel : Nat) : Program → Nat
   | [] => 1

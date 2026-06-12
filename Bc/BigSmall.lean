@@ -53,7 +53,7 @@ theorem containsQuit_ofStmt : (s : Stmt) →
   | .quit => by simp [StmtTerm.containsQuit, StmtTerm.ofStmt, Stmt.containsQuit]
   | .block body => by
       simp [StmtTerm.containsQuit, StmtTerm.ofStmt, Stmt.containsQuit,
-        BodyTerm.containsQuit, containsQuit_ofBodyItems body]
+        containsQuit_ofBodyItems body]
 termination_by s => sizeOf s
 
 theorem listContainsQuit_ofStmts : (ss : List Stmt) →
@@ -73,11 +73,11 @@ theorem containsQuit_ofBodyItems : (items : List BodyItem) →
           StmtTerm.listContainsQuit (BodyTerm.ofBodyItems rest) = bodyContainsQuit rest := by
         simpa [BodyTerm.containsQuit] using containsQuit_ofBodyItems rest
       simp [BodyTerm.containsQuit, BodyTerm.ofBodyItems,
-        listContainsQuit_ofStmts ss, stmtsContainQuit, bodyContainsQuit,
-        bodyItemContainsQuit, StmtTerm.listContainsQuit_append, hrest, Bool.or_assoc]
+        listContainsQuit_ofStmts ss, bodyContainsQuit, bodyItemContainsQuit,
+        StmtTerm.listContainsQuit_append, hrest]
   | BodyItem.newline :: rest => by
-      simp [BodyTerm.containsQuit, BodyTerm.ofBodyItems, bodyContainsQuit,
-        bodyItemContainsQuit, containsQuit_ofBodyItems rest]
+      simp [BodyTerm.ofBodyItems, bodyContainsQuit, bodyItemContainsQuit,
+        containsQuit_ofBodyItems rest]
 termination_by items => sizeOf items
 
 end
@@ -90,12 +90,12 @@ private def topItemStmtsOf (ss : List StmtTerm) : List TopItemTerm :=
 theorem listContainsQuit_ofStmtTerms (ss : List StmtTerm) :
     (topItemStmtsOf ss).any TopItemTerm.containsQuit = StmtTerm.listContainsQuit ss := by
   induction ss with
-  | nil => simp [topItemStmtsOf, TopItemTerm.containsQuit, StmtTerm.listContainsQuit]
+  | nil => simp [topItemStmtsOf, StmtTerm.listContainsQuit]
   | cons s rest ih =>
       have ih' : (List.map (fun s => TopItemTerm.stmt s) rest).any TopItemTerm.containsQuit =
           StmtTerm.listContainsQuit rest := by
         simpa [topItemStmtsOf] using ih
-      simp [topItemStmtsOf, StmtTerm.listContainsQuit, List.any, List.map, ih',
+      simp [topItemStmtsOf, StmtTerm.listContainsQuit, List.map, ih',
         TopItemTerm.containsQuit]
 
 theorem TopItemTerm.ofTopItem_stmts_map_noQuit (ss : List Stmt) (h : ¬ stmtsContainQuit ss) :
@@ -118,8 +118,7 @@ theorem TopItemTerm.containsQuit_ofTopItem_stmts (ss : List Stmt) :
 theorem TopItemTerm.containsQuit_ofTopItem_funDef (defn : FunDef) :
     (TopItemTerm.ofTopItem (.funDef defn)).any TopItemTerm.containsQuit =
       TopItem.containsQuit (.funDef defn) := by
-  simp [TopItemTerm.ofTopItem, TopItem.containsQuit, TopItemTerm.containsQuit,
-    bodyContainsQuit]
+  simp [TopItemTerm.ofTopItem, TopItem.containsQuit, TopItemTerm.containsQuit]
 
 theorem TopItemTerm.containsQuit_ofTopItem (item : TopItem) :
     (TopItemTerm.ofTopItem item).any TopItemTerm.containsQuit = TopItem.containsQuit item := by
@@ -498,10 +497,11 @@ private theorem step_topItem_containsQuit {st item rest}
   cases item with
   | funDef defn =>
       have hbody : bodyContainsQuit defn.body = true := by
-        simpa [TopItem.containsQuit] using hquit
+        simp [TopItem.containsQuit] at hquit
+        exact hquit
       simp [TopItemTerm.ofTopItem, step, TopItemTerm.containsQuit, hbody]
   | stmts ss =>
-      simp [TopItemTerm.ofTopItem, TopItem.containsQuit] at hquit
+      simp [TopItem.containsQuit] at hquit
       simp [TopItemTerm.ofTopItem, hquit, step, TopItemTerm.containsQuit,
         StmtTerm.containsQuit]
 
@@ -553,7 +553,8 @@ private theorem evalProgramItems_to_ConfigRuns {fuel st program r}
                             ConfigRuns.next
                               (by
                                 have hbody : bodyContainsQuit defn.body = false := by
-                                  simpa [TopItem.containsQuit] using hquit
+                                  simp [TopItem.containsQuit] at hquit
+                                  exact hquit
                                 simp [ProgramTerm.ofProgram, TopItemTerm.ofTopItem, step, next,
                                   TopItemTerm.containsQuit, hbody])
                               hcont,
@@ -562,9 +563,10 @@ private theorem evalProgramItems_to_ConfigRuns {fuel st program r}
                           have hbody : BodyRuns st (.stmts (StmtTerm.ofStmts ss)) (.done st₁) :=
                             evalStmts_to_BodyRuns htop (by simp [ResultNotFuel])
                           have hnoEq : stmtsContainQuit ss = false := by
-                            simpa [TopItem.containsQuit] using hquit
+                            simp [TopItem.containsQuit] at hquit
+                            exact hquit
                           have hno : StmtTerm.listContainsQuit (StmtTerm.ofStmts ss) = false := by
-                            simpa [listContainsQuit_ofStmts, hnoEq]
+                            simp [listContainsQuit_ofStmts, hnoEq]
                           have hnoProp : ¬ stmtsContainQuit ss := by
                             intro hs
                             simp [hs] at hnoEq
@@ -586,9 +588,10 @@ private theorem evalProgramItems_to_ConfigRuns {fuel st program r}
                               (.control st₁ .break) :=
                             evalStmts_to_BodyRuns htop (by simp [ResultNotFuel])
                           have hnoEq : stmtsContainQuit ss = false := by
-                            simpa [TopItem.containsQuit] using hquit
+                            simp [TopItem.containsQuit] at hquit
+                            exact hquit
                           have hno : StmtTerm.listContainsQuit (StmtTerm.ofStmts ss) = false := by
-                            simpa [listContainsQuit_ofStmts, hnoEq]
+                            simp [listContainsQuit_ofStmts, hnoEq]
                           have hnoProp : ¬ stmtsContainQuit ss := by
                             intro hs
                             simp [hs] at hnoEq
@@ -610,9 +613,10 @@ private theorem evalProgramItems_to_ConfigRuns {fuel st program r}
                               (.control st₁ (.return value?)) :=
                             evalStmts_to_BodyRuns htop (by simp [ResultNotFuel])
                           have hnoEq : stmtsContainQuit ss = false := by
-                            simpa [TopItem.containsQuit] using hquit
+                            simp [TopItem.containsQuit] at hquit
+                            exact hquit
                           have hno : StmtTerm.listContainsQuit (StmtTerm.ofStmts ss) = false := by
-                            simpa [listContainsQuit_ofStmts, hnoEq]
+                            simp [listContainsQuit_ofStmts, hnoEq]
                           have hnoProp : ¬ stmtsContainQuit ss := by
                             intro hs
                             simp [hs] at hnoEq
@@ -634,9 +638,10 @@ private theorem evalProgramItems_to_ConfigRuns {fuel st program r}
                               (.control st₁ .quit) :=
                             evalStmts_to_BodyRuns htop (by simp [ResultNotFuel])
                           have hnoEq : stmtsContainQuit ss = false := by
-                            simpa [TopItem.containsQuit] using hquit
+                            simp [TopItem.containsQuit] at hquit
+                            exact hquit
                           have hno : StmtTerm.listContainsQuit (StmtTerm.ofStmts ss) = false := by
-                            simpa [listContainsQuit_ofStmts, hnoEq]
+                            simp [listContainsQuit_ofStmts, hnoEq]
                           have hnoProp : ¬ stmtsContainQuit ss := by
                             intro hs
                             simp [hs] at hnoEq
@@ -662,9 +667,10 @@ private theorem evalProgramItems_to_ConfigRuns {fuel st program r}
                           (.runtimeError st₁ msg) :=
                         evalStmts_to_BodyRuns htop (by simp [ResultNotFuel])
                       have hnoEq : stmtsContainQuit ss = false := by
-                        simpa [TopItem.containsQuit] using hquit
+                        simp [TopItem.containsQuit] at hquit
+                        exact hquit
                       have hno : StmtTerm.listContainsQuit (StmtTerm.ofStmts ss) = false := by
-                        simpa [listContainsQuit_ofStmts, hnoEq]
+                        simp [listContainsQuit_ofStmts, hnoEq]
                       have hnoProp : ¬ stmtsContainQuit ss := by
                         intro hs
                         simp [hs] at hnoEq
@@ -782,7 +788,8 @@ theorem termination_transfer {st : RuntimeState} {program : Program}
           cases item with
           | funDef defn =>
               have hbody : bodyContainsQuit defn.body = false := by
-                simpa [TopItem.containsQuit] using hquit
+                simp [TopItem.containsQuit] at hquit
+                exact hquit
               have hstep : step ⟨st, ProgramTerm.ofProgram (TopItem.funDef defn :: rest)⟩ =
                   .next ⟨setFunction st defn, ProgramTerm.ofProgram rest⟩ := by
                 simp [ProgramTerm.ofProgram, TopItemTerm.ofTopItem, step, next,
@@ -798,7 +805,8 @@ theorem termination_transfer {st : RuntimeState} {program : Program}
               exact hfb
           | stmts ss =>
               have hnoEq : stmtsContainQuit ss = false := by
-                simpa [TopItem.containsQuit] using hquit
+                simp [TopItem.containsQuit] at hquit
+                exact hquit
               have hno : StmtTerm.listContainsQuit (StmtTerm.ofStmts ss) = false := by
                 simp [listContainsQuit_ofStmts, hnoEq]
               have hnoProp : ¬ stmtsContainQuit ss := by
@@ -896,7 +904,7 @@ private theorem big_to_small_runProgramWithState {st : RuntimeState} {program : 
           ⟨o, hcfg, hout⟩
         rcases ConfigRuns.to_fuel hcfg with ⟨smallFuel, hsmall⟩
         exact ⟨smallFuel, by
-          simpa [SmallStep.runProgramWithState, SmallStep.initialConfig, hsmall, hout,
+          simp [SmallStep.runProgramWithState, SmallStep.initialConfig, hsmall, hout,
             resultToRunResult]⟩
     | outOfFuel st' =>
         simp [heval] at hrun
@@ -909,7 +917,7 @@ private theorem big_to_small_runProgramWithState {st : RuntimeState} {program : 
           ⟨o, hcfg, hout⟩
         rcases ConfigRuns.to_fuel hcfg with ⟨smallFuel, hsmall⟩
         exact ⟨smallFuel, by
-          simpa [SmallStep.runProgramWithState, SmallStep.initialConfig, hsmall, hout,
+          simp [SmallStep.runProgramWithState, SmallStep.initialConfig, hsmall, hout,
             resultToRunResult]⟩
 
 /-- Small-step final results are reproducible by the big-step evaluator.

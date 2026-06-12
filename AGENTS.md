@@ -17,7 +17,8 @@ arbitrary-precision calculator language.
 - **Parser** (`parser/`) — tree-sitter grammar for `.b`/`.bc` files (standalone;
   see README *Parser (tree-sitter)* section)
 - **Core implementation** (`Bc/`) — surface AST and tree-sitter bridge
-- **Interpreter entry point** (`Main.lean`) — CLI (`bc-lean`; evaluator WIP)
+- **Interpreter entry point** (`Main.lean`) — CLI (`bc-lean`) with big-step and
+  small-step evaluator modes
 - **Parse test CLI** (`Bc/ParseTestMain.lean`) — `bc-parse-test` for AST goldens
 - **Reference source** (`bc-1.07.1/`) — the unpacked GNU bc 1.07.1 source, kept
   locally for consultation. It is **not committed** (see `.gitignore`).
@@ -73,15 +74,13 @@ make run BC=examples/hello.bc          # Run a .bc file
 lake exe bc-lean examples/hello.bc     # ...or directly via lake
 lake exe bc-lean --semantics small examples/hello.bc
 
-# Lean cache (mathlib); `lean-build` already depends on `cache`
-make cache                             # Download precompiled caches if needed
-make cache-refresh                     # Force fresh cache (use after toolchain/mathlib bumps)
+# Lean cache compatibility target; this project has no external Lean deps
+make cache                             # No-op kept for existing workflows
+make cache-refresh                     # Force a clean rebuild (lake clean)
 
-# Cleaning (WARNING: distclean invalidates the mathlib cache - avoid; ask user
-# permission if absolutely necessary)
+# Cleaning
 make clean                             # Clean Lean build artifacts (lake clean)
 make distclean                         # Also remove .lake and lake-manifest.json
-# After a distclean, run: lake exe cache get
 ```
 
 ## Architecture
@@ -97,8 +96,8 @@ Standalone bc parser for `.b` and `.bc` files. Grammar source:
 Surface AST, tree-sitter XML bridge (`Bc/Parser.lean`), shared runtime helpers
 (`Bc/Runtime.lean`), and operational semantics under the `Bc` namespace
 (`lakefile.lean` → `lean_lib Bc`). The parser is syntax-only; do not add context
-checks, diagnostics, or semantic checks to it. Modules avoid mathlib except
-where the evaluator will need it later.
+checks, diagnostics, or semantic checks to it. The project intentionally has no
+external Lean dependencies.
 
 ### Other Components
 

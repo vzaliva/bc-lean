@@ -1,9 +1,8 @@
 # bc-lean — open TODOs
 
 Cleanliness / quality items not directly on the big-step ↔ small-step
-equivalence critical path. (The equivalence theorem itself is tracked in
-`REPORT.md` Step 13; its one remaining `sorry` is
-`Bc/BigSmall/Backward.lean : termination_transfer`.)
+equivalence critical path. The equivalence theorem itself is tracked in
+`REPORT.md` Step 13 and is now fully proved.
 
 These were surfaced by an earlier code review and are recorded here so they are
 not lost.
@@ -12,11 +11,11 @@ not lost.
 
 ## #8 — Small-step stepping is quadratic
 
-Every `step` re-traverses the entire head term to locate the redex (and re-runs
-the quit scan), so a run is ~O(term-size² · steps). This is why the Makefile
-needs `SMALL_STEP_FUEL ?= 100000000` vs `BIG_STEP_FUEL ?= 200000`
-(`Makefile:5-6`) — a ~500× gap. Fine as a *definition*, but not a usable
-interpreter at scale, and the huge constant is a smell.
+Every `step` re-traverses the current residual term to locate the next redex, so
+a run is ~O(term-size² · steps). This is why the Makefile needs
+`SMALL_STEP_FUEL ?= 100000000` vs `BIG_STEP_FUEL ?= 200000` (`Makefile:5-6`) —
+a ~500× gap. Fine as a *definition*, but not a usable interpreter at scale, and
+the huge constant is a smell.
 
 **Action (larger):** if the small-step semantics should also be runnable at
 scale, switch the residual representation to a focus / zipper / continuation
